@@ -1,4 +1,5 @@
 const { onCall, onRequest, HttpsError } = require('firebase-functions/v2/https');
+const { defineJsonSecret } = require('firebase-functions/params');
 const admin = require('firebase-admin');
 const { randomBytes, randomUUID, scryptSync, timingSafeEqual, createHash } = require('node:crypto');
 
@@ -6,6 +7,8 @@ admin.initializeApp();
 const db = admin.firestore();
 const bucket = admin.storage().bucket();
 const REGION = 'asia-southeast1';
+const EMAIL_CONFIG = defineJsonSecret('RUN_CAL_EMAIL_CONFIG');
+const PUBLIC_URL = 'https://run-cal-th.web.app';
 const USERNAME = /^[A-Za-z0-9_-]{4,8}$/;
 const PIN = /^\d{6}$/;
 const hash = value => createHash('sha256').update(value).digest('hex');
@@ -53,6 +56,50 @@ function boundedText(value, max, field, required = false) {
   if (required && !result) stop('invalid-argument', `${field} is required.`);
   if (result.length > max) stop('invalid-argument', `${field} is too long.`);
   return result;
+}
+function emailConfig() {
+  const config = EMAIL_CONFIG.value();
+  if (!config || typeof config.apiKey !== 'string' || !config.apiKey.startsWith('re_') || !/^.+<[^<>\s]+@[^<>\s]+>$/.test(String(config.from || ''))) {
+    stop('failed-precondition', 'Email delivery is not configured.');
+  }
+  return config;
+}
+async function sendEmail({ to, subject, text, idempotencyKey }) {
+  const config = emailConfig();
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${config.apiKey}`,
+      'Content-Type': 'application/json',
+      'User-Agent': 'RUN-CAL/1.0',
+      'Idempotency-Key': idempotencyKey,
+    },
+    body: JSON.stringify({ from: config.from, to: [to], subject, text }),
+  });
+  if (!response.ok) stop('internal', 'Email delivery failed. Please try again later.');
+}
+async function issueAccountToken({ purpose, uid, email }) {
+  const rawToken = randomBytes(32).toString('base64url');
+  const tokenHash = hash(rawToken);
+  await db.collection('accountTokens').doc(tokenHash).create({
+    purpose,
+    uid,
+    email,
+    expiresAt: admin.firestore.Timestamp.fromMillis(Date.now() + 3600000),
+    usedAt: null,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  return rawToken;
+}
+async function allowRecoveryEmail(email, purpose) {
+  const ref = db.collection('accountRecoveryRate').doc(hash(`${purpose}:${email}`));
+  return db.runTransaction(async transaction => {
+    const current = await transaction.get(ref);
+    const lastRequested = current.exists ? current.data().requestedAt : null;
+    if (lastRequested && Date.now() - lastRequested.toMillis() < 60000) return false;
+    transaction.set(ref, { requestedAt: admin.firestore.FieldValue.serverTimestamp() });
+    return true;
+  });
 }
 async function parseRunningFit(bytes) {
   const { Decoder, Stream } = await import('@garmin/fitsdk');
@@ -331,13 +378,19 @@ exports.loginWithUsernamePin = onCall({ region: REGION }, async request => {
   return {token:await admin.auth().createCustomToken(index.data().uid)};
 });
 
-exports.createInvite = onCall({ region: REGION }, async request => {
+exports.createInvite = onCall({ region: REGION, secrets: [EMAIL_CONFIG] }, async request => {
   if(!request.auth) stop('unauthenticated','Sign in required.'); const workspaceId=await adminMember(request.auth.uid);
   const { email,role='athlete' }=request.data || {}; if(!/^\S+@\S+\.\S+$/.test(String(email || '')) || !['athlete','coach'].includes(role)) stop('invalid-argument','Valid email and role are required.');
   const token=randomBytes(24).toString('base64url'), id=hash(token), expiresAt=admin.firestore.Timestamp.fromMillis(Date.now()+3600000);
   await db.collection('workspaces').doc(workspaceId).collection('invites').doc(id).set({email:String(email).toLowerCase(),roles:[role],status:'pending',expiresAt,invitedBy:request.auth.uid,createdAt:admin.firestore.FieldValue.serverTimestamp()});
-  // Gmail delivery is added only after OAuth secrets are configured.
-  return {inviteToken:token,expiresInMinutes:60};
+  const inviteUrl = `${PUBLIC_URL}/?invite=${encodeURIComponent(token)}`;
+  await sendEmail({
+    to: String(email).trim().toLowerCase(),
+    subject: 'You are invited to RUN|CAL',
+    text: `You have been invited to join RUN|CAL as ${role}. Create your Username and 6-digit PIN using this one-hour link: ${inviteUrl}`,
+    idempotencyKey: `invite-${id}`,
+  });
+  return {expiresInMinutes:60};
 });
 
 exports.acceptInvite = onCall({ region: REGION }, async request => {
@@ -347,4 +400,63 @@ exports.acceptInvite = onCall({ region: REGION }, async request => {
   const invite=invitations.docs[0], data=invite.data(); if(data.status!=='pending' || data.expiresAt.toMillis()<Date.now()) stop('failed-precondition','Invitation is invalid or expired.'); if((await usernameIndex(username).get()).exists) stop('already-exists','Username is already in use.');
   const uid=randomUUID(), workspaceId=invite.ref.parent.parent.id, serverTime=admin.firestore.FieldValue.serverTimestamp(); await admin.auth().createUser({uid,email:data.email,displayName:text(displayName)}); const batch=db.batch();
   batch.update(invite.ref,{status:'accepted',acceptedAt:serverTime}); batch.set(db.collection('users').doc(uid),{displayName:text(displayName),email:data.email,workspaceId,status:'active',createdAt:serverTime}); batch.set(db.collection('workspaces').doc(workspaceId).collection('members').doc(uid),{roles:data.roles,displayName:text(displayName),email:data.email,createdAt:serverTime}); batch.set(account(uid),{username:String(username),pinHash:makePinHash(String(pin)),failedAttempts:0,lockedAt:null,createdAt:serverTime}); batch.set(usernameIndex(username),{uid}); await batch.commit(); return {token:await admin.auth().createCustomToken(uid)};
+});
+
+exports.requestUsernameLookup = onCall({ region: REGION, secrets: [EMAIL_CONFIG] }, async request => {
+  const email = String((request.data || {}).email || '').trim().toLowerCase();
+  if (!/^\S+@\S+\.\S+$/.test(email)) stop('invalid-argument', 'Enter a valid email address.');
+  const generic = { message: 'If that email is registered, a verification link will be sent shortly.' };
+  if (!await allowRecoveryEmail(email, 'username_lookup')) return generic;
+  const users = await db.collection('users').where('email', '==', email).where('status', '==', 'active').limit(1).get();
+  if (users.empty) return generic;
+  const token = await issueAccountToken({ purpose: 'username_lookup', uid: users.docs[0].id, email });
+  await sendEmail({
+    to: email,
+    subject: 'Check your RUN|CAL Username',
+    text: `Use this one-hour link to view your RUN|CAL Username: ${PUBLIC_URL}/?username=${encodeURIComponent(token)}`,
+    idempotencyKey: `username-${hash(token)}`,
+  });
+  return generic;
+});
+
+exports.verifyUsernameLookup = onCall({ region: REGION }, async request => {
+  const tokenHash = hash(String((request.data || {}).token || ''));
+  const tokenRef = db.collection('accountTokens').doc(tokenHash);
+  const token = await tokenRef.get();
+  if (!token.exists || token.data().purpose !== 'username_lookup' || token.data().usedAt || token.data().expiresAt.toMillis() < Date.now()) stop('failed-precondition', 'This verification link is invalid or expired.');
+  const privateAccount = await account(token.data().uid).get();
+  if (!privateAccount.exists) stop('not-found', 'Account is unavailable.');
+  await tokenRef.update({ usedAt: admin.firestore.FieldValue.serverTimestamp() });
+  return { username: privateAccount.data().username };
+});
+
+exports.requestPinReset = onCall({ region: REGION, secrets: [EMAIL_CONFIG] }, async request => {
+  const email = String((request.data || {}).email || '').trim().toLowerCase();
+  if (!/^\S+@\S+\.\S+$/.test(email)) stop('invalid-argument', 'Enter a valid email address.');
+  const generic = { message: 'If that email is registered, a PIN reset link will be sent shortly.' };
+  if (!await allowRecoveryEmail(email, 'pin_reset')) return generic;
+  const users = await db.collection('users').where('email', '==', email).where('status', '==', 'active').limit(1).get();
+  if (users.empty) return generic;
+  const token = await issueAccountToken({ purpose: 'pin_reset', uid: users.docs[0].id, email });
+  await sendEmail({
+    to: email,
+    subject: 'Reset your RUN|CAL PIN',
+    text: `Use this one-hour link to set a new six-digit RUN|CAL PIN: ${PUBLIC_URL}/?reset=${encodeURIComponent(token)}`,
+    idempotencyKey: `pin-${hash(token)}`,
+  });
+  return generic;
+});
+
+exports.confirmPinReset = onCall({ region: REGION }, async request => {
+  const { token, pin } = request.data || {};
+  if (!PIN.test(String(pin || ''))) stop('invalid-argument', 'PIN must contain exactly 6 digits.');
+  const tokenRef = db.collection('accountTokens').doc(hash(String(token || '')));
+  const found = await tokenRef.get();
+  if (!found.exists || found.data().purpose !== 'pin_reset' || found.data().usedAt || found.data().expiresAt.toMillis() < Date.now()) stop('failed-precondition', 'This PIN reset link is invalid or expired.');
+  const batch = db.batch();
+  batch.update(account(found.data().uid), { pinHash: makePinHash(String(pin)), failedAttempts: 0, lockedAt: null, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+  batch.update(tokenRef, { usedAt: admin.firestore.FieldValue.serverTimestamp() });
+  await batch.commit();
+  await admin.auth().revokeRefreshTokens(found.data().uid);
+  return { reset: true };
 });

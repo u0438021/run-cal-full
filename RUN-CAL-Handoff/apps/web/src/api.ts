@@ -48,13 +48,13 @@ export const api = {
   recovery: (body: Record<string, unknown>) => call<{ saved: boolean }>('saveRecovery', body),
   monthly: (body: Record<string, unknown>) => call<{ saved: boolean }>('saveMonthlyLog', body),
   invite: async (email: string, roles: string[]) => {
-    const result = await call<{ inviteToken: string; expiresInMinutes: number }>('createInvite', { email, role: roles[0] || 'athlete' })
-    return { expiresInMinutes: result.expiresInMinutes, delivery: `Share this secure invitation link: ${window.location.origin}/?invite=${encodeURIComponent(result.inviteToken)}` }
+    const result = await call<{ expiresInMinutes: number }>('createInvite', { email, role: roles[0] || 'athlete' })
+    return { expiresInMinutes: result.expiresInMinutes, delivery: 'Invitation email sent.' }
   },
-  requestUsername: (_email: string) => unavailable<{ message: string }>('Username lookup'),
-  verifyUsername: (_token: string) => unavailable<{ username: string }>('Username lookup'),
-  requestPinReset: (_email: string) => unavailable<{ message: string }>('PIN reset'),
-  confirmPinReset: (_token: string, _pin: string) => unavailable<void>('PIN reset'),
+  requestUsername: (email: string) => call<{ message: string }>('requestUsernameLookup', { email }),
+  verifyUsername: (token: string) => call<{ username: string }>('verifyUsernameLookup', { token }),
+  requestPinReset: (email: string) => call<{ message: string }>('requestPinReset', { email }),
+  confirmPinReset: (token: string, pin: string) => call<{ reset: boolean }>('confirmPinReset', { token, pin }),
   cancelInvite: (_id: string) => unavailable<void>('Invitation cancellation'),
   startAdminTransfer: (_toUserId: string, _pin: string) => unavailable<{ transferId: string; transferToken?: string }>('Team Admin transfer'),
   acceptAdminTransfer: (_transferId: string) => unavailable<void>('Team Admin transfer'),
