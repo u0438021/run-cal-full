@@ -12,6 +12,10 @@ const text = value => String(value || '').trim();
 const stop = (code, message) => { throw new HttpsError(code, message); };
 const account = uid => db.collection('privateAccounts').doc(uid);
 const usernameIndex = username => db.collection('usernameIndex').doc(String(username).toLowerCase());
+const athlete = (workspaceId, uid) => db.collection('workspaces').doc(workspaceId).collection('athletes').doc(uid);
+const dayInBangkok = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok', year: 'numeric', month: '2-digit', day: '2-digit' })
+  .formatToParts(new Date()).reduce((value, part) => ({ ...value, [part.type]: part.value }), {});
+const today = () => { const day = dayInBangkok(); return `${day.year}-${day.month}-${day.day}`; };
 
 function checkCredentials(username, pin) {
   if (!USERNAME.test(String(username || ''))) stop('invalid-argument', 'Username must be 4–8 letters, numbers, - or _.');
@@ -26,6 +30,26 @@ async function adminMember(uid) {
   const member=await db.collection('workspaces').doc(workspaceId).collection('members').doc(uid).get();
   if(!member.exists || !(member.data().roles || []).includes('team_admin')) stop('permission-denied','Team Admin permission required.');
   return workspaceId;
+}
+async function activeMember(uid) {
+  const user = await db.collection('users').doc(uid).get();
+  if (!user.exists || user.data().status !== 'active') stop('unauthenticated', 'Sign in required.');
+  const workspaceId = user.data().workspaceId;
+  const member = await db.collection('workspaces').doc(workspaceId).collection('members').doc(uid).get();
+  if (!member.exists) stop('permission-denied', 'Workspace access is unavailable.');
+  return { workspaceId, user: user.data(), roles: member.data().roles || [] };
+}
+async function athleteMember(request) {
+  if (!request.auth) stop('unauthenticated', 'Sign in required.');
+  const membership = await activeMember(request.auth.uid);
+  if (!membership.roles.includes('athlete')) stop('permission-denied', 'Athlete permission required.');
+  return { ...membership, uid: request.auth.uid };
+}
+function boundedText(value, max, field, required = false) {
+  const result = text(value);
+  if (required && !result) stop('invalid-argument', `${field} is required.`);
+  if (result.length > max) stop('invalid-argument', `${field} is too long.`);
+  return result;
 }
 
 exports.healthCheck = onRequest({ region: REGION, cors: false }, (_req, res) => res.status(200).json({ service: 'run-cal-api', status: 'ok' }));
@@ -59,6 +83,15 @@ exports.getBootstrap = onCall({ region: REGION }, async request => {
       isTeamAdmin: workspaceSnapshot.data().teamAdminId === doc.id,
     }))
     : [];
+  const athleteRef = athlete(workspaceRef.id, uid);
+  const [profileSnapshot, recoverySnapshot, monthlySnapshot] = roles.includes('athlete')
+    ? await Promise.all([
+      athleteRef.get(),
+      athleteRef.collection('recovery').doc(today()).get(),
+      athleteRef.collection('monthly').orderBy('month', 'desc').limit(24).get(),
+    ])
+    : [null, null, null];
+  const profileData = profileSnapshot?.exists ? profileSnapshot.data() : null;
   return {
     setupRequired: false,
     user: {
@@ -72,14 +105,83 @@ exports.getBootstrap = onCall({ region: REGION }, async request => {
       workspaceName: workspaceSnapshot.data().name,
       roles,
     },
-    profile: null,
+    profile: profileData ? {
+      emergencyName: profileData.emergencyName,
+      emergencyRelation: profileData.emergencyRelation,
+      emergencyPhone: profileData.emergencyPhone,
+      sportGoal: profileData.sportGoal,
+      experienceYears: profileData.experienceYears,
+      experienceNote: profileData.experienceNote,
+      usesStryd: profileData.usesStryd ? 1 : 0,
+    } : null,
     notifications: [],
-    recovery: null,
-    monthly: [],
+    recovery: recoverySnapshot?.exists ? recoverySnapshot.data() : null,
+    monthly: monthlySnapshot ? monthlySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) : [],
     activities: [],
     athletes: [],
     members,
   };
+});
+
+exports.saveProfile = onCall({ region: REGION }, async request => {
+  const { workspaceId, uid } = await athleteMember(request);
+  const data = request.data || {};
+  const experienceYears = Number(data.experienceYears);
+  if (!Number.isInteger(experienceYears) || experienceYears < 0 || experienceYears > 100) stop('invalid-argument', 'Experience years must be a whole number from 0 to 100.');
+  await athlete(workspaceId, uid).set({
+    emergencyName: boundedText(data.emergencyName, 120, 'Emergency contact name', true),
+    emergencyRelation: boundedText(data.emergencyRelation, 80, 'Relationship', true),
+    emergencyPhone: boundedText(data.emergencyPhone, 40, 'Emergency contact phone', true),
+    sportGoal: boundedText(data.sportGoal, 1000, 'Sport goal', true),
+    experienceYears,
+    experienceNote: boundedText(data.experienceNote, 2000, 'Experience details'),
+    usesStryd: Boolean(data.usesStryd),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  }, { merge: true });
+  return { saved: true };
+});
+
+exports.saveRecovery = onCall({ region: REGION }, async request => {
+  const { workspaceId, uid } = await athleteMember(request);
+  const data = request.data || {};
+  const scores = ['sleep', 'energy', 'soreness', 'stress', 'mood'].reduce((result, name) => {
+    const value = Number(data[name]);
+    if (!Number.isInteger(value) || value < 1 || value > 5) stop('invalid-argument', 'Each recovery score must be a whole number from 1 to 5.');
+    return { ...result, [name]: value };
+  }, {});
+  const checkinDate = today();
+  await athlete(workspaceId, uid).collection('recovery').doc(checkinDate).set({
+    ...scores,
+    note: boundedText(data.note, 2000, 'Note'),
+    checkinDate,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  }, { merge: true });
+  return { saved: true, checkinDate };
+});
+
+exports.saveMonthlyLog = onCall({ region: REGION }, async request => {
+  const { workspaceId, uid } = await athleteMember(request);
+  const data = request.data || {};
+  const month = String(data.month || '');
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month) || month > today().slice(0, 7)) stop('invalid-argument', 'Choose a valid current or past month.');
+  const weightKg = Number(data.weightKg);
+  if (!Number.isFinite(weightKg) || weightKg < 20 || weightKg > 300) stop('invalid-argument', 'Weight must be between 20 and 300 kg.');
+  const profile = await athlete(workspaceId, uid).get();
+  const cpValue = data.cpWatts === '' || data.cpWatts === null || data.cpWatts === undefined ? null : Number(data.cpWatts);
+  if (profile.exists && profile.data().usesStryd && (!Number.isFinite(cpValue) || cpValue <= 0 || cpValue > 1000)) stop('invalid-argument', 'A valid CP value is required when Stryd is enabled.');
+  if (cpValue !== null && (!Number.isFinite(cpValue) || cpValue <= 0 || cpValue > 1000)) stop('invalid-argument', 'CP must be between 1 and 1000 watts.');
+  const ref = athlete(workspaceId, uid).collection('monthly').doc(month);
+  if ((await ref.get()).exists) stop('already-exists', 'This monthly log is already locked.');
+  await ref.create({
+    month,
+    weightKg: Number(weightKg.toFixed(1)),
+    cpWatts: cpValue,
+    wkg: cpValue === null ? null : Number((cpValue / weightKg).toFixed(2)),
+    comment: boundedText(data.comment, 2000, 'Comment'),
+    coachReply: '',
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  return { saved: true };
 });
 
 exports.setupFirstWorkspace = onCall({ region: REGION }, async request => {
