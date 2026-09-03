@@ -1,5 +1,5 @@
 const { onCall, onRequest, HttpsError } = require('firebase-functions/v2/https');
-const { defineJsonSecret } = require('firebase-functions/params');
+const { defineSecret } = require('firebase-functions/params');
 const admin = require('firebase-admin');
 const nodemailer = require('nodemailer');
 const { randomBytes, randomUUID, scryptSync, timingSafeEqual, createHash } = require('node:crypto');
@@ -8,7 +8,8 @@ admin.initializeApp();
 const db = admin.firestore();
 const bucket = admin.storage().bucket();
 const REGION = 'asia-southeast1';
-const GMAIL_CONFIG = defineJsonSecret('RUN_CAL_GMAIL_SMTP_CONFIG');
+const GMAIL_FROM = defineSecret('RUN_CAL_GMAIL_FROM');
+const GMAIL_APP_PASSWORD = defineSecret('RUN_CAL_GMAIL_APP_PASSWORD');
 const PUBLIC_URL = 'https://run-cal-th.web.app';
 const USERNAME = /^[A-Za-z0-9_-]{4,8}$/;
 const PIN = /^\d{6}$/;
@@ -59,10 +60,10 @@ function boundedText(value, max, field, required = false) {
   return result;
 }
 function gmailConfig() {
-  const config = GMAIL_CONFIG.value();
-  const appPassword = String(config?.appPassword || '').replace(/\s/g, '');
-  if (!config || !/^\S+@\S+\.\S+$/.test(String(config.from || '')) || !/^[A-Za-z0-9]{16}$/.test(appPassword)) stop('failed-precondition', 'Gmail delivery is not configured.');
-  return { from: config.from, appPassword };
+  const from = String(GMAIL_FROM.value() || '').trim();
+  const appPassword = String(GMAIL_APP_PASSWORD.value() || '').replace(/\s/g, '');
+  if (!/^\S+@\S+\.\S+$/.test(from) || !/^[A-Za-z0-9]{16}$/.test(appPassword)) stop('failed-precondition', 'Gmail delivery is not configured.');
+  return { from, appPassword };
 }
 async function sendEmail({ to, subject, text, idempotencyKey }) {
   const config = gmailConfig();
@@ -394,7 +395,7 @@ exports.loginWithUsernamePin = onCall({ region: REGION }, async request => {
   return {token:await admin.auth().createCustomToken(index.data().uid)};
 });
 
-exports.createInvite = onCall({ region: REGION, secrets: ['RUN_CAL_GMAIL_SMTP_CONFIG'] }, async request => {
+exports.createInvite = onCall({ region: REGION, secrets: ['RUN_CAL_GMAIL_FROM', 'RUN_CAL_GMAIL_APP_PASSWORD'] }, async request => {
   if(!request.auth) stop('unauthenticated','Sign in required.'); const workspaceId=await adminMember(request.auth.uid);
   const { email,role='athlete' }=request.data || {}; if(!/^\S+@\S+\.\S+$/.test(String(email || '')) || !['athlete','coach'].includes(role)) stop('invalid-argument','Valid email and role are required.');
   const token=randomBytes(24).toString('base64url'), id=hash(token), expiresAt=admin.firestore.Timestamp.fromMillis(Date.now()+3600000);
@@ -418,7 +419,7 @@ exports.acceptInvite = onCall({ region: REGION }, async request => {
   batch.update(invite.ref,{status:'accepted',acceptedAt:serverTime}); batch.set(db.collection('users').doc(uid),{displayName:text(displayName),email:data.email,workspaceId,status:'active',createdAt:serverTime}); batch.set(db.collection('workspaces').doc(workspaceId).collection('members').doc(uid),{roles:data.roles,displayName:text(displayName),email:data.email,createdAt:serverTime}); batch.set(account(uid),{username:String(username),pinHash:makePinHash(String(pin)),failedAttempts:0,lockedAt:null,createdAt:serverTime}); batch.set(usernameIndex(username),{uid}); await batch.commit(); return {token:await admin.auth().createCustomToken(uid)};
 });
 
-exports.requestUsernameLookup = onCall({ region: REGION, secrets: ['RUN_CAL_GMAIL_SMTP_CONFIG'] }, async request => {
+exports.requestUsernameLookup = onCall({ region: REGION, secrets: ['RUN_CAL_GMAIL_FROM', 'RUN_CAL_GMAIL_APP_PASSWORD'] }, async request => {
   const email = String((request.data || {}).email || '').trim().toLowerCase();
   if (!/^\S+@\S+\.\S+$/.test(email)) stop('invalid-argument', 'Enter a valid email address.');
   const generic = { message: 'If that email is registered, a verification link will be sent shortly.' };
@@ -446,7 +447,7 @@ exports.verifyUsernameLookup = onCall({ region: REGION }, async request => {
   return { username: privateAccount.data().username };
 });
 
-exports.requestPinReset = onCall({ region: REGION, secrets: ['RUN_CAL_GMAIL_SMTP_CONFIG'] }, async request => {
+exports.requestPinReset = onCall({ region: REGION, secrets: ['RUN_CAL_GMAIL_FROM', 'RUN_CAL_GMAIL_APP_PASSWORD'] }, async request => {
   const email = String((request.data || {}).email || '').trim().toLowerCase();
   if (!/^\S+@\S+\.\S+$/.test(email)) stop('invalid-argument', 'Enter a valid email address.');
   const generic = { message: 'If that email is registered, a PIN reset link will be sent shortly.' };

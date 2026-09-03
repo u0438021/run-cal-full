@@ -21,7 +21,7 @@ npm.cmd run dev
 
 ## Account email delivery
 
-Invite, Username lookup and PIN reset links are one-time links that expire after one hour. They are sent by a single Gmail account controlled by the platform owner through Gmail SMTP. The Gmail App Password must be stored only in the Firebase Secret Manager secret `RUN_CAL_GMAIL_SMTP_CONFIG`; never place it in browser code or Firestore.
+Invite, Username lookup and PIN reset links are one-time links that expire after one hour. They are sent by a single Gmail account controlled by the platform owner through Gmail SMTP. The sender address and Gmail App Password must be stored only in Firebase Secret Manager as `RUN_CAL_GMAIL_FROM` and `RUN_CAL_GMAIL_APP_PASSWORD`; never place either in browser code or Firestore.
 
 ## Account controls implemented
 

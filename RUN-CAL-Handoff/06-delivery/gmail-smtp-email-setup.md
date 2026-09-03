@@ -12,19 +12,14 @@ App Passwords are not available to accounts using only security keys, Advanced P
 
 ## Store configuration in Firebase
 
-From `RUN-CAL-Handoff`, run this command locally. Firebase prompts for the JSON secret value; it is not written into the repository.
+From `RUN-CAL-Handoff`, run these commands locally. Firebase prompts for each value; neither value is written into the repository.
 
 ```powershell
-node 'C:\Users\winai\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js' functions:secrets:set RUN_CAL_GMAIL_SMTP_CONFIG --project run-cal-th --format=json
+node 'C:\Users\winai\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js' functions:secrets:set RUN_CAL_GMAIL_FROM --project run-cal-th
+
+node 'C:\Users\winai\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js' functions:secrets:set RUN_CAL_GMAIL_APP_PASSWORD --project run-cal-th
 ```
 
-Paste this shape, replacing the placeholders yourself:
+For the first command, enter only the sender Gmail address. For the second command, enter only the 16-character App Password, with or without the spaces Google displays.
 
-```json
-{
-  "from": "your-sender@gmail.com",
-  "appPassword": "YOUR_16_CHARACTER_APP_PASSWORD"
-}
-```
-
-After the secret exists, deploy the account-email functions and Hosting together. Browser code never reads the sender email or App Password.
+After both secrets exist, deploy the account-email functions and Hosting together. Browser code never reads the sender email or App Password.
