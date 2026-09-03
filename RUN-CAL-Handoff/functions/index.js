@@ -7,7 +7,7 @@ admin.initializeApp();
 const db = admin.firestore();
 const bucket = admin.storage().bucket();
 const REGION = 'asia-southeast1';
-const EMAIL_CONFIG = defineJsonSecret('RUN_CAL_EMAIL_CONFIG');
+const GMAIL_CONFIG = defineJsonSecret('RUN_CAL_GMAIL_OAUTH_CONFIG');
 const PUBLIC_URL = 'https://run-cal-th.web.app';
 const USERNAME = /^[A-Za-z0-9_-]{4,8}$/;
 const PIN = /^\d{6}$/;
@@ -57,24 +57,41 @@ function boundedText(value, max, field, required = false) {
   if (result.length > max) stop('invalid-argument', `${field} is too long.`);
   return result;
 }
-function emailConfig() {
-  const config = EMAIL_CONFIG.value();
-  if (!config || typeof config.apiKey !== 'string' || !config.apiKey.startsWith('re_') || !/^.+<[^<>\s]+@[^<>\s]+>$/.test(String(config.from || ''))) {
-    stop('failed-precondition', 'Email delivery is not configured.');
-  }
+function gmailConfig() {
+  const config = GMAIL_CONFIG.value();
+  if (!config || typeof config.clientId !== 'string' || !config.clientId.endsWith('.apps.googleusercontent.com') || typeof config.clientSecret !== 'string' || typeof config.refreshToken !== 'string' || !/^\S+@\S+\.\S+$/.test(String(config.from || ''))) stop('failed-precondition', 'Gmail delivery is not configured.');
   return config;
 }
 async function sendEmail({ to, subject, text, idempotencyKey }) {
-  const config = emailConfig();
-  const response = await fetch('https://api.resend.com/emails', {
+  const config = gmailConfig();
+  const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${config.apiKey}`,
       'Content-Type': 'application/json',
-      'User-Agent': 'RUN-CAL/1.0',
-      'Idempotency-Key': idempotencyKey,
     },
-    body: JSON.stringify({ from: config.from, to: [to], subject, text }),
+    body: new URLSearchParams({
+      client_id: config.clientId,
+      client_secret: config.clientSecret,
+      refresh_token: config.refreshToken,
+      grant_type: 'refresh_token',
+    }),
+  });
+  if (!tokenResponse.ok) stop('failed-precondition', 'Gmail connection needs to be reconnected.');
+  const { access_token: accessToken } = await tokenResponse.json();
+  const message = [
+    `From: RUN|CAL <${config.from}>`,
+    `To: ${to}`,
+    `Subject: ${subject}`,
+    'MIME-Version: 1.0',
+    'Content-Type: text/plain; charset=UTF-8',
+    `Message-ID: <${idempotencyKey}@run-cal-th.firebaseapp.com>`,
+    '',
+    text,
+  ].join('\r\n');
+  const response = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ raw: Buffer.from(message).toString('base64url') }),
   });
   if (!response.ok) stop('internal', 'Email delivery failed. Please try again later.');
 }
@@ -389,7 +406,7 @@ exports.loginWithUsernamePin = onCall({ region: REGION }, async request => {
   return {token:await admin.auth().createCustomToken(index.data().uid)};
 });
 
-exports.createInvite = onCall({ region: REGION, secrets: [EMAIL_CONFIG] }, async request => {
+exports.createInvite = onCall({ region: REGION, secrets: [GMAIL_CONFIG] }, async request => {
   if(!request.auth) stop('unauthenticated','Sign in required.'); const workspaceId=await adminMember(request.auth.uid);
   const { email,role='athlete' }=request.data || {}; if(!/^\S+@\S+\.\S+$/.test(String(email || '')) || !['athlete','coach'].includes(role)) stop('invalid-argument','Valid email and role are required.');
   const token=randomBytes(24).toString('base64url'), id=hash(token), expiresAt=admin.firestore.Timestamp.fromMillis(Date.now()+3600000);
@@ -413,7 +430,7 @@ exports.acceptInvite = onCall({ region: REGION }, async request => {
   batch.update(invite.ref,{status:'accepted',acceptedAt:serverTime}); batch.set(db.collection('users').doc(uid),{displayName:text(displayName),email:data.email,workspaceId,status:'active',createdAt:serverTime}); batch.set(db.collection('workspaces').doc(workspaceId).collection('members').doc(uid),{roles:data.roles,displayName:text(displayName),email:data.email,createdAt:serverTime}); batch.set(account(uid),{username:String(username),pinHash:makePinHash(String(pin)),failedAttempts:0,lockedAt:null,createdAt:serverTime}); batch.set(usernameIndex(username),{uid}); await batch.commit(); return {token:await admin.auth().createCustomToken(uid)};
 });
 
-exports.requestUsernameLookup = onCall({ region: REGION, secrets: [EMAIL_CONFIG] }, async request => {
+exports.requestUsernameLookup = onCall({ region: REGION, secrets: [GMAIL_CONFIG] }, async request => {
   const email = String((request.data || {}).email || '').trim().toLowerCase();
   if (!/^\S+@\S+\.\S+$/.test(email)) stop('invalid-argument', 'Enter a valid email address.');
   const generic = { message: 'If that email is registered, a verification link will be sent shortly.' };
@@ -441,7 +458,7 @@ exports.verifyUsernameLookup = onCall({ region: REGION }, async request => {
   return { username: privateAccount.data().username };
 });
 
-exports.requestPinReset = onCall({ region: REGION, secrets: [EMAIL_CONFIG] }, async request => {
+exports.requestPinReset = onCall({ region: REGION, secrets: [GMAIL_CONFIG] }, async request => {
   const email = String((request.data || {}).email || '').trim().toLowerCase();
   if (!/^\S+@\S+\.\S+$/.test(email)) stop('invalid-argument', 'Enter a valid email address.');
   const generic = { message: 'If that email is registered, a PIN reset link will be sent shortly.' };
