@@ -152,9 +152,10 @@ exports.getBootstrap = onCall({ region: REGION }, async request => {
   if (!userSnapshot.exists || userSnapshot.data().status !== 'active') stop('unauthenticated', 'Sign in required.');
   const user = userSnapshot.data();
   const workspaceRef = db.collection('workspaces').doc(user.workspaceId);
-  const [workspaceSnapshot, memberSnapshot] = await Promise.all([
+  const [workspaceSnapshot, memberSnapshot, notificationsSnapshot] = await Promise.all([
     workspaceRef.get(),
     workspaceRef.collection('members').doc(uid).get(),
+    workspaceRef.collection('notifications').where('userId', '==', uid).limit(50).get(),
   ]);
   if (!workspaceSnapshot.exists || !memberSnapshot.exists) stop('permission-denied', 'Workspace access is unavailable.');
   const roles = memberSnapshot.data().roles || [];
@@ -199,7 +200,17 @@ exports.getBootstrap = onCall({ region: REGION }, async request => {
       experienceNote: profileData.experienceNote,
       usesStryd: profileData.usesStryd ? 1 : 0,
     } : null,
-    notifications: [],
+    notifications: notificationsSnapshot.docs
+      .map(doc => ({ id: doc.id, ...doc.data() }))
+      .sort((left, right) => (right.createdAt?.toMillis?.() || 0) - (left.createdAt?.toMillis?.() || 0))
+      .map(notification => ({
+        id: notification.id,
+        title: notification.title,
+        body: notification.body,
+        href: notification.href || '',
+        readAt: notification.readAt?.toDate?.().toISOString?.() || null,
+        createdAt: notification.createdAt?.toDate?.().toISOString?.() || '',
+      })),
     recovery: recoverySnapshot?.exists ? recoverySnapshot.data() : null,
     monthly: monthlySnapshot ? monthlySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) : [],
     activities: activitiesSnapshot ? activitiesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) : [],
@@ -459,4 +470,85 @@ exports.confirmPinReset = onCall({ region: REGION }, async request => {
   await batch.commit();
   await admin.auth().revokeRefreshTokens(found.data().uid);
   return { reset: true };
+});
+
+exports.startAdminTransfer = onCall({ region: REGION }, async request => {
+  if (!request.auth) stop('unauthenticated', 'Sign in required.');
+  const fromUserId = request.auth.uid;
+  const workspaceId = await adminMember(fromUserId);
+  const { toUserId, pin } = request.data || {};
+  if (!fitUploadId(toUserId) || toUserId === fromUserId) stop('invalid-argument', 'Choose another active team member.');
+  if (!PIN.test(String(pin || ''))) stop('invalid-argument', 'PIN must contain exactly 6 digits.');
+  const [privateAccount, targetUser, targetMember] = await Promise.all([
+    account(fromUserId).get(),
+    db.collection('users').doc(String(toUserId)).get(),
+    db.collection('workspaces').doc(workspaceId).collection('members').doc(String(toUserId)).get(),
+  ]);
+  if (!privateAccount.exists || !matchesPin(String(pin), privateAccount.data().pinHash)) stop('unauthenticated', 'Invalid username or PIN.');
+  if (!targetUser.exists || targetUser.data().status !== 'active' || targetUser.data().workspaceId !== workspaceId || !targetMember.exists) stop('invalid-argument', 'Choose another active team member.');
+  const transferId = randomUUID();
+  const expiresAt = admin.firestore.Timestamp.fromMillis(Date.now() + 3600000);
+  const transferRef = db.collection('workspaces').doc(workspaceId).collection('adminTransfers').doc(transferId);
+  const notificationRef = db.collection('workspaces').doc(workspaceId).collection('notifications').doc();
+  const batch = db.batch();
+  batch.set(transferRef, { fromUserId, toUserId: String(toUserId), status: 'pending', expiresAt, createdAt: admin.firestore.FieldValue.serverTimestamp() });
+  batch.set(notificationRef, {
+    userId: String(toUserId),
+    title: 'Team Admin transfer requested',
+    body: 'Accept this request within 60 minutes to become the new Team Admin.',
+    href: `/team?transfer=${transferId}`,
+    readAt: null,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  await batch.commit();
+  return { transferId, expiresInMinutes: 60 };
+});
+
+exports.acceptAdminTransfer = onCall({ region: REGION }, async request => {
+  if (!request.auth) stop('unauthenticated', 'Sign in required.');
+  const toUserId = request.auth.uid;
+  const transferId = String((request.data || {}).transferId || '');
+  if (!fitUploadId(transferId)) stop('invalid-argument', 'The transfer request is invalid.');
+  const { workspaceId } = await activeMember(toUserId);
+  const workspaceRef = db.collection('workspaces').doc(workspaceId);
+  const transferRef = workspaceRef.collection('adminTransfers').doc(transferId);
+  await db.runTransaction(async transaction => {
+    const [workspaceSnapshot, transferSnapshot, targetMember] = await Promise.all([
+      transaction.get(workspaceRef),
+      transaction.get(transferRef),
+      transaction.get(workspaceRef.collection('members').doc(toUserId)),
+    ]);
+    if (!workspaceSnapshot.exists || !transferSnapshot.exists || !targetMember.exists) stop('not-found', 'The transfer request is unavailable.');
+    const transfer = transferSnapshot.data();
+    if (transfer.status !== 'pending' || transfer.toUserId !== toUserId || transfer.expiresAt.toMillis() < Date.now()) stop('failed-precondition', 'This transfer request is invalid or expired.');
+    if (workspaceSnapshot.data().teamAdminId !== transfer.fromUserId) stop('failed-precondition', 'This transfer request is no longer current.');
+    const previousMemberRef = workspaceRef.collection('members').doc(transfer.fromUserId);
+    const previousMember = await transaction.get(previousMemberRef);
+    if (!previousMember.exists) stop('failed-precondition', 'The current Team Admin is unavailable.');
+    const targetRoles = [...new Set([...(targetMember.data().roles || []), 'team_admin'])];
+    const previousRoles = (previousMember.data().roles || []).filter(role => role !== 'team_admin');
+    transaction.update(workspaceRef, { teamAdminId: toUserId, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+    transaction.update(workspaceRef.collection('members').doc(toUserId), { roles: targetRoles, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+    transaction.update(previousMemberRef, { roles: previousRoles, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+    transaction.update(transferRef, { status: 'accepted', acceptedAt: admin.firestore.FieldValue.serverTimestamp() });
+  });
+  const pendingNotification = await workspaceRef.collection('notifications')
+    .where('userId', '==', toUserId)
+    .where('href', '==', `/team?transfer=${transferId}`)
+    .limit(1)
+    .get();
+  if (!pendingNotification.empty) await pendingNotification.docs[0].ref.update({ readAt: admin.firestore.FieldValue.serverTimestamp() });
+  return { accepted: true };
+});
+
+exports.markNotificationRead = onCall({ region: REGION }, async request => {
+  if (!request.auth) stop('unauthenticated', 'Sign in required.');
+  const notificationId = String((request.data || {}).notificationId || '');
+  if (!notificationId || notificationId.length > 128) stop('invalid-argument', 'Notification is invalid.');
+  const { workspaceId } = await activeMember(request.auth.uid);
+  const notificationRef = db.collection('workspaces').doc(workspaceId).collection('notifications').doc(notificationId);
+  const notification = await notificationRef.get();
+  if (!notification.exists || notification.data().userId !== request.auth.uid) stop('not-found', 'Notification is unavailable.');
+  if (!notification.data().readAt) await notificationRef.update({ readAt: admin.firestore.FieldValue.serverTimestamp() });
+  return { read: true };
 });
