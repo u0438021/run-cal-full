@@ -28,3 +28,9 @@ Buttons (primary orange, secondary, quiet, danger), fields, six-cell PIN, segmen
 
 Use neutral, evidence-aware language: “Needs Review,” “Data unavailable,” “Insufficient data,” “Proposed change.” Avoid “bad athlete,” diagnostic language, or unsupported “optimal/safe/risk” labels.
 
+## Localization
+
+- MVP supports two application languages: English (`en`) and Thai (`th`).
+- The active language controls navigation, buttons, field labels, validation/error states, empty states, availability labels, Help/FAQ and release notes. Do not mix languages within a component except for units, established metric abbreviations (for example `CP`, `LTHR`, `RPE`, `FIT`) and properly named external services.
+- The user selects the language in Page 14; persist the choice per account and use English as the initial fallback. Locale changes must not change stored measurements, formula versions, dates/effective dates or raw data.
+- Thai layouts must be tested for wrapping, 44px minimum touch targets and meaningful line breaks. All user-provided names, notes and messages remain exactly as entered.

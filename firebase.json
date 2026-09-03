@@ -7,6 +7,19 @@
       "**/node_modules/**"
     ],
     "cleanUrls": true,
+    "redirects": [
+      {
+        "source": "/",
+        "destination": "/all-pages.html",
+        "type": 302
+      }
+    ],
+    "rewrites": [
+      {
+        "source": "/",
+        "destination": "/all-pages.html"
+      }
+    ],
     "headers": [
       {
         "source": "**/*.@(js|css)",

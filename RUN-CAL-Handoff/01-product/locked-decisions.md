@@ -18,14 +18,14 @@
 | LD-14 | Multi-tenant workspace architecture; athlete data never leaks across workspaces | LOCKED |
 | LD-15 | Google Drive mapping uses folder ID, never folder name as identity | LOCKED |
 | LD-16 | Testing data records source, quality, environment, effective date, and protocol version | LOCKED |
-| LD-17 | No formula invention. Listed unresolved formulas are BLOCKED-SOURCE until explicit approval | LOCKED |
+| LD-17 | No formula invention. LTP/LTHR, Pace/HR Zones and Hydration use `RUN-CAL-TEST-PROTOCOLS/2026.09.03`; Session-RPE Load uses `RUN-CAL-SRPE-LOAD/1.0`; Stryd/Coach CP and Power Zone profiles use `RUN-CAL-CP-PROFILE/1.0`; all other load, CP-estimation and power-zone formulas remain BLOCKED-SOURCE | LOCKED |
+| LD-18 | The app supports English (`en`) and Thai (`th`). The language selector is in Page 14 and applies to the full user interface, Help/FAQ and release notes; it never changes stored raw data, units or protocol versions | LOCKED |
+| LD-19 | Testing Protocols is a Page 14 / Athlete Profile calculator subpage. Test results are isolated by default; only Pace and HR Zone profiles may be updated after an explicit proposed-versus-current confirmation. No automatic or retrospective changes are allowed | LOCKED |
 
 ## Open decisions (do not silently resolve)
 
-- Original references and formulas for LTP, LTHR, hydration/sweat-rate protocols.
-- Primary RUN|CAL load model; HR-load and power-load formulas; CTL/ATL/ACWR/ramp-rate use.
+- HR-load and power-load formulas; CTL/ATL/ACWR/ramp-rate use.
 - Stryd/coach/RUN|CAL power-zone percentage definitions and licensing/attribution.
 - HR-zone model and readiness/status thresholds.
 - Final production authentication posture beyond controlled PIN access (passkey/MFA/admin requirements).
 - Data retention/export/deletion periods and jurisdiction-specific privacy policy.
-
