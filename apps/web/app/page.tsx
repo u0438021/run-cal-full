@@ -1,0 +1,20 @@
+const Icon = ({ children }: { children: React.ReactNode }) => <span className="icon" aria-hidden="true">{children}</span>;
+const metrics = [
+  { label: "Distance", value: "54.8", unit: "km", note: "+8%", tone: "lime" },
+  { label: "Training load", value: "412", unit: "pts", note: "Balanced", tone: "paper" },
+  { label: "Fitness", value: "61", unit: "CTL", note: "+3 this month", tone: "ink" },
+];
+export default function Dashboard() {
+  return <div className="app-shell">
+    <aside className="rail"><a className="mark" href="#" aria-label="Stride home">S<span>·</span></a><nav aria-label="Primary navigation"><a className="active" href="#overview"><Icon>⌂</Icon><span>Overview</span></a><a href="#activities"><Icon>↗</Icon><span>Activities</span></a><a href="#analytics"><Icon>⌁</Icon><span>Analytics</span></a><a href="#athletes"><Icon>◉</Icon><span>Athletes</span></a></nav><button className="avatar" aria-label="Open profile">MK</button></aside>
+    <main id="overview">
+      <header className="topbar"><div><p className="kicker">TUESDAY · 02 SEPTEMBER</p><h1>Good morning,<br/>Maya.</h1></div><div className="header-actions"><button className="circle-button" aria-label="Notifications">●</button><button className="upload">Upload FIT <span>↗</span></button></div></header>
+      <section className="metric-grid" aria-label="Weekly summary">{metrics.map(m => <article className={`metric-card ${m.tone}`} key={m.label}><div className="card-top"><span>{m.label}</span><span className="trend">{m.note}</span></div><div><strong>{m.value}</strong><small>{m.unit}</small></div></article>)}</section>
+      <section className="insight-card"><div className="insight-copy"><p className="kicker dark">TODAY’S AI INSIGHT</p><h2>You’re getting more efficient.</h2><p>At the same power, your heart rate was <b>4 bpm lower</b> across three steady runs. Keep tomorrow easy to absorb the gain.</p><button className="text-button">View evidence <span>↗</span></button></div><div className="efficiency-mark" aria-label="Efficiency improved by six percent"><span>+6%</span><small>efficiency</small></div></section>
+      <section className="data-grid"><article className="load-card"><div className="section-heading"><div><p className="kicker">LOAD & FORM</p><h2>Six-week build</h2></div><div className="segmented"><button className="selected">6W</button><button>12W</button><button>1Y</button></div></div><div className="chart-area" aria-label="Training load chart"><div className="axis"><span>600</span><span>400</span><span>200</span><span>0</span></div><div className="bars">{[35,45,42,58,52,68,63,78,71,84,79,92].map((height,index)=><i key={index} style={{height:`${height}%`}}><span/></i>)}</div></div><div className="legend"><span><i className="dot lime-dot"/>Load</span><span><i className="dot white-dot"/>Fitness</span><b>Form +5</b></div></article>
+      <article className="power-card"><div className="section-heading"><div><p className="kicker dark">RUNNING POWER</p><h2>Critical power</h2></div><button className="round-arrow" aria-label="Open power analytics">↗</button></div><strong className="power-value">286 <small>W</small></strong><p>3.84 W/kg · strong data confidence</p><div className="power-stats"><div><span>Form ratio</span><b>22.6%</b></div><div><span>Stryd coverage</span><b>96%</b></div></div></article></section>
+      <section className="recent"><div className="section-heading"><div><p className="kicker">RECENT RUN</p><h2>Riverside progression</h2></div><a href="#activity">See activity ↗</a></div><div className="run-row"><div className="route" aria-hidden="true"><i/><i/><i/><i/><i/></div><div><span>Distance</span><b>12.4 km</b></div><div><span>Avg pace</span><b>4:38 /km</b></div><div><span>Avg power</span><b>279 W</b></div><div><span>Avg HR</span><b>151 bpm</b></div></div></section>
+    </main>
+    <nav className="mobile-nav" aria-label="Mobile navigation"><a className="active" href="#overview">⌂</a><a href="#activities">↗</a><button aria-label="Upload FIT">＋</button><a href="#analytics">⌁</a><a href="#athletes">◉</a></nav>
+  </div>;
+}

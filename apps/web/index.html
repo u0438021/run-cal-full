@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Running performance, power, and training analytics">
+  <title>Stride — Running Data Analytics</title>
+  <link rel="stylesheet" href="app/styles.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="rail">
+      <a class="mark" href="#overview" aria-label="Stride home">S<span>·</span></a>
+      <nav aria-label="Primary navigation">
+        <a class="active" href="#overview" data-page="overview"><span class="icon" aria-hidden="true">⌂</span><span>Overview</span></a>
+        <a href="#activities" data-page="activities"><span class="icon" aria-hidden="true">↗</span><span>Activities</span></a>
+        <a href="#analytics" data-page="analytics"><span class="icon" aria-hidden="true">⌁</span><span>Analytics</span></a>
+        <a href="#athletes" data-page="athletes"><span class="icon" aria-hidden="true">◉</span><span>Athletes</span></a>
+      </nav>
+      <button class="avatar" type="button" aria-label="Open profile">MK</button>
+    </aside>
+
+    <main id="overview">
+      <header class="topbar">
+        <div><p class="kicker">TUESDAY · 02 SEPTEMBER</p><h1>Good morning,<br>Maya.</h1></div>
+        <div class="header-actions">
+          <button class="circle-button" type="button" aria-label="Notifications">●</button>
+          <button class="upload" id="upload-button" type="button">Upload FIT <span>↗</span></button>
+          <input id="fit-file" type="file" accept=".fit" multiple hidden>
+        </div>
+      </header>
+
+      <section class="metric-grid" aria-label="Weekly summary">
+        <article class="metric-card lime"><div class="card-top"><span>Distance</span><span class="trend">+8%</span></div><div><strong>54.8</strong><small>km</small></div></article>
+        <article class="metric-card paper"><div class="card-top"><span>Training load</span><span class="trend">Balanced</span></div><div><strong>412</strong><small>pts</small></div></article>
+        <article class="metric-card ink"><div class="card-top"><span>Fitness</span><span class="trend">+3 this month</span></div><div><strong>61</strong><small>CTL</small></div></article>
+      </section>
+
+      <section class="insight-card">
+        <div class="insight-copy"><p class="kicker dark">TODAY’S AI INSIGHT</p><h2>You’re getting more efficient.</h2><p>At the same power, your heart rate was <b>4 bpm lower</b> across three steady runs. Keep tomorrow easy to absorb the gain.</p><button class="text-button" type="button">View evidence <span>↗</span></button></div>
+        <div class="efficiency-mark" aria-label="Efficiency improved by six percent"><span>+6%</span><small>efficiency</small></div>
+      </section>
+
+      <section class="data-grid">
+        <article class="load-card">
+          <div class="section-heading"><div><p class="kicker">LOAD &amp; FORM</p><h2>Six-week build</h2></div><div class="segmented" aria-label="Chart period"><button class="selected" type="button" data-period="6W">6W</button><button type="button" data-period="12W">12W</button><button type="button" data-period="1Y">1Y</button></div></div>
+          <div class="chart-area" role="img" aria-label="Training load has increased over the last six weeks"><div class="axis"><span>600</span><span>400</span><span>200</span><span>0</span></div><div class="bars"><i style="height:35%"><span></span></i><i style="height:45%"><span></span></i><i style="height:42%"><span></span></i><i style="height:58%"><span></span></i><i style="height:52%"><span></span></i><i style="height:68%"><span></span></i><i style="height:63%"><span></span></i><i style="height:78%"><span></span></i><i style="height:71%"><span></span></i><i style="height:84%"><span></span></i><i style="height:79%"><span></span></i><i style="height:92%"><span></span></i></div></div>
+          <div class="legend"><span><i class="dot lime-dot"></i>Load</span><span><i class="dot white-dot"></i>Fitness</span><b>Form +5</b></div>
+        </article>
+
+        <article class="power-card">
+          <div class="section-heading"><div><p class="kicker dark">RUNNING POWER</p><h2>Critical power</h2></div><button class="round-arrow" type="button" aria-label="Open power analytics">↗</button></div>
+          <strong class="power-value">286 <small>W</small></strong><p>3.84 W/kg · strong data confidence</p>
+          <div class="power-stats"><div><span>Form ratio</span><b>22.6%</b></div><div><span>Stryd coverage</span><b>96%</b></div></div>
+        </article>
+      </section>
+
+      <section class="recent" id="activities">
+        <div class="section-heading"><div><p class="kicker">RECENT RUN</p><h2>Riverside progression</h2></div><a href="#activity">See activity ↗</a></div>
+        <div class="run-row"><div class="route" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div><div><span>Distance</span><b>12.4 km</b></div><div><span>Avg pace</span><b>4:38 /km</b></div><div><span>Avg power</span><b>279 W</b></div><div><span>Avg HR</span><b>151 bpm</b></div></div>
+      </section>
+      <p id="status-message" role="status" aria-live="polite"></p>
+    </main>
+
+    <nav class="mobile-nav" aria-label="Mobile navigation"><a class="active" href="#overview" data-page="overview">⌂</a><a href="#activities" data-page="activities">↗</a><button id="mobile-upload" type="button" aria-label="Upload FIT">＋</button><a href="#analytics" data-page="analytics">⌁</a><a href="#athletes" data-page="athletes">◉</a></nav>
+  </div>
+</body>
+</html>
