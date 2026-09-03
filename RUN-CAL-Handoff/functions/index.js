@@ -4,6 +4,7 @@ const { randomBytes, randomUUID, scryptSync, timingSafeEqual, createHash } = req
 
 admin.initializeApp();
 const db = admin.firestore();
+const bucket = admin.storage().bucket();
 const REGION = 'asia-southeast1';
 const USERNAME = /^[A-Za-z0-9_-]{4,8}$/;
 const PIN = /^\d{6}$/;
@@ -16,6 +17,7 @@ const athlete = (workspaceId, uid) => db.collection('workspaces').doc(workspaceI
 const dayInBangkok = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok', year: 'numeric', month: '2-digit', day: '2-digit' })
   .formatToParts(new Date()).reduce((value, part) => ({ ...value, [part.type]: part.value }), {});
 const today = () => { const day = dayInBangkok(); return `${day.year}-${day.month}-${day.day}`; };
+const fitUploadId = value => /^[0-9a-f-]{36}$/i.test(String(value || ''));
 
 function checkCredentials(username, pin) {
   if (!USERNAME.test(String(username || ''))) stop('invalid-argument', 'Username must be 4–8 letters, numbers, - or _.');
@@ -84,13 +86,14 @@ exports.getBootstrap = onCall({ region: REGION }, async request => {
     }))
     : [];
   const athleteRef = athlete(workspaceRef.id, uid);
-  const [profileSnapshot, recoverySnapshot, monthlySnapshot] = roles.includes('athlete')
+  const [profileSnapshot, recoverySnapshot, monthlySnapshot, activitiesSnapshot] = roles.includes('athlete')
     ? await Promise.all([
       athleteRef.get(),
       athleteRef.collection('recovery').doc(today()).get(),
       athleteRef.collection('monthly').orderBy('month', 'desc').limit(24).get(),
+      athleteRef.collection('activities').orderBy('createdAt', 'desc').limit(100).get(),
     ])
-    : [null, null, null];
+    : [null, null, null, null];
   const profileData = profileSnapshot?.exists ? profileSnapshot.data() : null;
   return {
     setupRequired: false,
@@ -117,7 +120,7 @@ exports.getBootstrap = onCall({ region: REGION }, async request => {
     notifications: [],
     recovery: recoverySnapshot?.exists ? recoverySnapshot.data() : null,
     monthly: monthlySnapshot ? monthlySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) : [],
-    activities: [],
+    activities: activitiesSnapshot ? activitiesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) : [],
     athletes: [],
     members,
   };
@@ -182,6 +185,72 @@ exports.saveMonthlyLog = onCall({ region: REGION }, async request => {
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
   });
   return { saved: true };
+});
+
+exports.startFitUpload = onCall({ region: REGION }, async request => {
+  const { workspaceId, uid } = await athleteMember(request);
+  const { originalName, byteSize } = request.data || {};
+  const filename = boundedText(originalName, 255, 'File name', true);
+  const size = Number(byteSize);
+  if (!/\.fit$/i.test(filename)) stop('invalid-argument', 'Only .FIT files are accepted.');
+  if (!Number.isInteger(size) || size < 1 || size > 25 * 1024 * 1024) stop('invalid-argument', 'FIT files must be between 1 byte and 25 MB.');
+  const uploadId = randomUUID();
+  await athlete(workspaceId, uid).collection('fitUploads').doc(uploadId).create({
+    originalName: filename,
+    byteSize: size,
+    status: 'pending',
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  return { uploadId };
+});
+
+exports.completeFitUpload = onCall({ region: REGION, timeoutSeconds: 120, memory: '512MiB' }, async request => {
+  const { workspaceId, uid } = await athleteMember(request);
+  const uploadId = String((request.data || {}).uploadId || '');
+  if (!fitUploadId(uploadId)) stop('invalid-argument', 'Invalid FIT upload.');
+  const athleteRef = athlete(workspaceId, uid);
+  const uploadRef = athleteRef.collection('fitUploads').doc(uploadId);
+  const upload = await uploadRef.get();
+  if (!upload.exists || upload.data().status !== 'pending') stop('failed-precondition', 'This upload is unavailable or has already been processed.');
+  const storagePath = `fit-staging/${workspaceId}/${uid}/${uploadId}`;
+  const file = bucket.file(storagePath);
+  const [exists] = await file.exists();
+  if (!exists) stop('not-found', 'FIT file upload was not found.');
+  const [metadata] = await file.getMetadata();
+  if (Number(metadata.size) !== Number(upload.data().byteSize) || Number(metadata.size) > 25 * 1024 * 1024) stop('invalid-argument', 'FIT file size does not match the upload request.');
+  const [bytes] = await file.download();
+  const sha256 = hash(bytes);
+  const duplicates = await athleteRef.collection('activities').where('sha256', '==', sha256).limit(1).get();
+  if (!duplicates.empty) {
+    await Promise.all([file.delete({ ignoreNotFound: true }), uploadRef.update({ status: 'duplicate', duplicateOf: duplicates.docs[0].id })]);
+    stop('already-exists', 'This FIT file was already imported.');
+  }
+  const activityId = randomUUID();
+  const originalName = upload.data().originalName;
+  const activityDate = today();
+  const batch = db.batch();
+  batch.set(athleteRef.collection('fitFiles').doc(activityId), {
+    objectKey: storagePath,
+    sha256,
+    byteSize: Number(metadata.size),
+    originalName,
+    sourceType: 'manual_upload',
+    immutable: true,
+    receivedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  batch.set(athleteRef.collection('activities').doc(activityId), {
+    title: originalName.replace(/\.fit$/i, ''),
+    activityDate,
+    originalName,
+    byteSize: Number(metadata.size),
+    sha256,
+    deletedAt: null,
+    importStatus: 'stored_unparsed',
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  batch.update(uploadRef, { status: 'completed', activityId, completedAt: admin.firestore.FieldValue.serverTimestamp() });
+  await batch.commit();
+  return { activityId, importStatus: 'stored_unparsed' };
 });
 
 exports.setupFirstWorkspace = onCall({ region: REGION }, async request => {

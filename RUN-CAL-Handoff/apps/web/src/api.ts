@@ -1,6 +1,7 @@
 import { signInWithCustomToken, signOut } from 'firebase/auth'
 import { httpsCallable } from 'firebase/functions'
-import { auth, functions } from './firebase'
+import { ref, uploadBytes } from 'firebase/storage'
+import { auth, functions, storage } from './firebase'
 
 export type State = {
   setupRequired: boolean
@@ -58,5 +59,10 @@ export const api = {
   startAdminTransfer: (_toUserId: string, _pin: string) => unavailable<{ transferId: string; transferToken?: string }>('Team Admin transfer'),
   acceptAdminTransfer: (_transferId: string) => unavailable<void>('Team Admin transfer'),
   markRead: (_id: string) => unavailable<void>('Notifications'),
-  fit: (_file: File) => unavailable<void>('FIT upload'),
+  fit: async (file: File) => {
+    const start = await call<{ uploadId: string }>('startFitUpload', { originalName: file.name, byteSize: file.size })
+    const workspaceId = (await call<State>('getBootstrap')).workspace.workspaceId
+    await uploadBytes(ref(storage, `fit-staging/${workspaceId}/${auth.currentUser?.uid}/${start.uploadId}`), file)
+    return call<{ activityId: string; importStatus: string }>('completeFitUpload', { uploadId: start.uploadId })
+  },
 }
