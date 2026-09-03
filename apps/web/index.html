@@ -1,69 +1,19 @@
 <!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Running performance, power, and training analytics">
-  <title>Stride — Running Data Analytics</title>
-  <link rel="stylesheet" href="app/styles.css">
-  <script src="app.js" defer></script>
-</head>
-<body>
-  <div class="app-shell">
-    <aside class="rail">
-      <a class="mark" href="#overview" aria-label="Stride home">S<span>·</span></a>
-      <nav aria-label="Primary navigation">
-        <a class="active" href="#overview" data-page="overview"><span class="icon" aria-hidden="true">⌂</span><span>Overview</span></a>
-        <a href="#activities" data-page="activities"><span class="icon" aria-hidden="true">↗</span><span>Activities</span></a>
-        <a href="#analytics" data-page="analytics"><span class="icon" aria-hidden="true">⌁</span><span>Analytics</span></a>
-        <a href="#athletes" data-page="athletes"><span class="icon" aria-hidden="true">◉</span><span>Athletes</span></a>
-      </nav>
-      <button class="avatar" type="button" aria-label="Open profile">MK</button>
-    </aside>
-
-    <main id="overview">
-      <header class="topbar">
-        <div><p class="kicker">TUESDAY · 02 SEPTEMBER</p><h1>Good morning,<br>Maya.</h1></div>
-        <div class="header-actions">
-          <button class="circle-button" type="button" aria-label="Notifications">●</button>
-          <button class="upload" id="upload-button" type="button">Upload FIT <span>↗</span></button>
-          <input id="fit-file" type="file" accept=".fit" multiple hidden>
-        </div>
-      </header>
-
-      <section class="metric-grid" aria-label="Weekly summary">
-        <article class="metric-card lime"><div class="card-top"><span>Distance</span><span class="trend">+8%</span></div><div><strong>54.8</strong><small>km</small></div></article>
-        <article class="metric-card paper"><div class="card-top"><span>Training load</span><span class="trend">Balanced</span></div><div><strong>412</strong><small>pts</small></div></article>
-        <article class="metric-card ink"><div class="card-top"><span>Fitness</span><span class="trend">+3 this month</span></div><div><strong>61</strong><small>CTL</small></div></article>
-      </section>
-
-      <section class="insight-card">
-        <div class="insight-copy"><p class="kicker dark">TODAY’S AI INSIGHT</p><h2>You’re getting more efficient.</h2><p>At the same power, your heart rate was <b>4 bpm lower</b> across three steady runs. Keep tomorrow easy to absorb the gain.</p><button class="text-button" type="button">View evidence <span>↗</span></button></div>
-        <div class="efficiency-mark" aria-label="Efficiency improved by six percent"><span>+6%</span><small>efficiency</small></div>
-      </section>
-
-      <section class="data-grid">
-        <article class="load-card">
-          <div class="section-heading"><div><p class="kicker">LOAD &amp; FORM</p><h2>Six-week build</h2></div><div class="segmented" aria-label="Chart period"><button class="selected" type="button" data-period="6W">6W</button><button type="button" data-period="12W">12W</button><button type="button" data-period="1Y">1Y</button></div></div>
-          <div class="chart-area" role="img" aria-label="Training load has increased over the last six weeks"><div class="axis"><span>600</span><span>400</span><span>200</span><span>0</span></div><div class="bars"><i style="height:35%"><span></span></i><i style="height:45%"><span></span></i><i style="height:42%"><span></span></i><i style="height:58%"><span></span></i><i style="height:52%"><span></span></i><i style="height:68%"><span></span></i><i style="height:63%"><span></span></i><i style="height:78%"><span></span></i><i style="height:71%"><span></span></i><i style="height:84%"><span></span></i><i style="height:79%"><span></span></i><i style="height:92%"><span></span></i></div></div>
-          <div class="legend"><span><i class="dot lime-dot"></i>Load</span><span><i class="dot white-dot"></i>Fitness</span><b>Form +5</b></div>
-        </article>
-
-        <article class="power-card">
-          <div class="section-heading"><div><p class="kicker dark">RUNNING POWER</p><h2>Critical power</h2></div><button class="round-arrow" type="button" aria-label="Open power analytics">↗</button></div>
-          <strong class="power-value">286 <small>W</small></strong><p>3.84 W/kg · strong data confidence</p>
-          <div class="power-stats"><div><span>Form ratio</span><b>22.6%</b></div><div><span>Stryd coverage</span><b>96%</b></div></div>
-        </article>
-      </section>
-
-      <section class="recent" id="activities">
-        <div class="section-heading"><div><p class="kicker">RECENT RUN</p><h2>Riverside progression</h2></div><a href="#activity">See activity ↗</a></div>
-        <div class="run-row"><div class="route" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div><div><span>Distance</span><b>12.4 km</b></div><div><span>Avg pace</span><b>4:38 /km</b></div><div><span>Avg power</span><b>279 W</b></div><div><span>Avg HR</span><b>151 bpm</b></div></div>
-      </section>
-      <p id="status-message" role="status" aria-live="polite"></p>
-    </main>
-
-    <nav class="mobile-nav" aria-label="Mobile navigation"><a class="active" href="#overview" data-page="overview">⌂</a><a href="#activities" data-page="activities">↗</a><button id="mobile-upload" type="button" aria-label="Upload FIT">＋</button><a href="#analytics" data-page="analytics">⌁</a><a href="#athletes" data-page="athletes">◉</a></nav>
-  </div>
-</body>
-</html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#121212"><title>RUN|CAL — Mobile Demo</title><link rel="stylesheet" href="app/styles.css"><script src="app.js" defer></script></head>
+<body><div class="app">
+  <aside class="sidebar"><a class="brand" href="#home">RUN<span>|</span>CAL</a><p>WORKSPACE</p><button class="workspace">Bangkok Run Club ⌄</button><nav><button class="active" data-view="home">⌂ <span>Home</span></button><button data-view="training">⌁ <span>Training</span></button><button data-view="calendar">□ <span>Calendar</span></button><button data-view="profile">◉ <span>Profile</span></button></nav><div class="user"><b>W</b><span><strong>Winai</strong><small>Athlete</small></span></div></aside>
+  <main>
+    <section class="view active" id="home"><header><div><p class="eyebrow">WEDNESDAY · 03 SEPTEMBER</p><h1>Good morning,<br><em>Winai.</em></h1></div><button class="avatar" data-view="profile">W</button></header>
+      <article class="today"><div><p class="eyebrow">TODAY'S TRAINING</p><h2>Easy Run · 8 km</h2><p>Keep your effort comfortable in HR Zone 2.</p></div><button data-view="calendar">View plan →</button></article>
+      <div class="section-head"><div><p class="eyebrow">DAILY RECOVERY</p><h2>How are you feeling?</h2></div><span id="saved">Not checked in</span></div>
+      <article class="recovery"><div><strong id="score">—</strong><small>/ 5</small><p id="recovery-copy">Your check-in takes about 15 seconds.</p></div><div class="rating"><button data-score="1">1</button><button data-score="2">2</button><button data-score="3">3</button><button data-score="4">4</button><button data-score="5">5</button></div><button class="link" data-view="training">Full check-in →</button></article>
+      <div class="stats"><article><p>THIS WEEK</p><strong>42.6 <small>km</small></strong><span>↑ 8% vs last week</span></article><article><p>TRAINING LOAD</p><strong>318 <small>AU</small></strong><span>Session RPE view</span></article><article><p>NEXT RACE</p><strong>73 <small>days</small></strong><span>Bangkok Marathon · A</span></article></div>
+      <article class="latest"><div class="section-head"><div><p class="eyebrow">LATEST RUN</p><h2>Riverside progression</h2><span class="muted">Yesterday · Easy</span></div><button class="round" data-view="training">↗</button></div><div class="activity"><div class="map"><svg viewBox="0 0 560 245"><path d="M34 160 C81 104,124 179,167 130 S255 52,294 113 S372 207,417 122 S489 73,530 113" fill="none" stroke="#ff5a1f" stroke-width="10" stroke-linecap="round"/><circle cx="34" cy="160" r="12" fill="#121212" stroke="white" stroke-width="6"/><circle cx="530" cy="113" r="12" fill="#ff5a1f" stroke="white" stroke-width="6"/></svg><span>GPS ROUTE · DEMO</span></div><div class="metrics"><div><span>Distance</span><b>10.24 <small>km</small></b></div><div><span>Time</span><b>52:14</b></div><div><span>Pace</span><b>5:06 <small>/km</small></b></div><div><span>Avg HR</span><b>148 <small>bpm</small></b></div><div><span>Power</span><b>254 <small>W</small></b></div><div><span>RPE</span><b>3 <small>/10</small></b></div></div></div><footer><b>ATHLETE NOTE</b><p>Legs felt easy after the first kilometre. Good session.</p><button id="comment">Add comment</button></footer></article>
+      <article class="ai"><div><p class="eyebrow">AI TRAINING REVIEW</p><h2>Building your baseline</h2><p>18 of 28 days collected. Add recovery and import runs to unlock an evidence-based weekly review.</p></div><div><i><em></em></i><b>64%</b></div></article>
+    </section>
+    <section class="view" id="training"><header><div><p class="eyebrow">TRAINING</p><h1>Load &amp; trends</h1></div><button class="pill" id="range">8 weeks ⌄</button></header><div class="context"><b>BUILD</b><span>Bangkok Marathon</span><em>73 days to race</em></div><article class="trend"><div class="section-head"><div><p class="eyebrow">WEEKLY VOLUME</p><h2>Consistent build</h2></div><span>+8.2%</span></div><div class="chart"><i style="height:42%">36</i><i style="height:55%">42</i><i style="height:62%">48</i><i style="height:72%">52</i><i class="now" style="height:83%">56</i></div><div class="weeks"><span>W1</span><span>W2</span><span>W3</span><span>W4</span><span>NOW</span></div></article><div class="training-cards"><article class="power"><p class="eyebrow">RUNNING POWER</p><strong>286 <small>W</small></strong><span>Critical Power · Stryd</span><hr><b>4.21 W/kg</b><small>Current weight 68 kg</small></article><article class="load"><p class="eyebrow">LOAD × RECOVERY</p><div class="bars"><i></i><i></i><i></i><i></i><i></i><i></i></div><p>Compare the trend; no automatic risk score is shown.</p></article></div><article class="notice"><b>Evidence rule</b><p>Power and recovery are included only when data is available. AI never changes your plan automatically.</p></article></section>
+    <section class="view" id="calendar"><header><div><p class="eyebrow">CALENDAR &amp; RACE GOALS</p><h1>September</h1></div><button class="pill">+ Add race</button></header><article class="race"><div><b>A</b><span><p class="eyebrow">PRIMARY RACE</p><h2>Bangkok Marathon</h2><p>15 Nov 2026 · 42.195 km · Sub 4:00</p></span></div><strong>73<small>days</small></strong></article><article class="calendar"><div class="week-head"><b>MON</b><b>TUE</b><b>WED</b><b>THU</b><b>FRI</b><b>SAT</b><b>SUN</b></div><div class="days"><div><span>1</span><p>Rest</p></div><div><span>2</span><p class="done">Easy<br><b>10 km</b></p></div><div class="current"><span>3</span><p>Easy<br><b>8 km</b></p></div><div><span>4</span><p>Tempo<br><b>10 km</b></p></div><div><span>5</span><p>Rest</p></div><div><span>6</span><p>Easy<br><b>8 km</b></p></div><div><span>7</span><p>Long run<br><b>24 km</b></p></div></div></article><article class="proposal"><p class="eyebrow">AI PROPOSAL</p><h2>Review before changing Thursday</h2><p>AI proposes, explains and waits for athlete or coach approval.</p><button>See approval flow →</button></article></section>
+    <section class="view" id="profile"><header><div><p class="eyebrow">ATHLETE PROFILE</p><h1>Winai</h1></div><button class="pill">Edit profile</button></header><article class="profile"><b>W</b><div><h2>Marathon preparation</h2><p>Build phase · Bangkok Run Club</p></div><span>FIELD TEST</span></article><div class="settings"><button><span>Running Power<small>CP 286 W · 4.21 W/kg</small></span><i>›</i></button><button><span>Testing &amp; Protocols<small>LTP · LTHR · Hydration history</small></span><i>›</i></button><button><span>Devices &amp; Sensors<small>Stryd enabled</small></span><i>›</i></button><button><span>Privacy &amp; Data<small>Original FIT files retained</small></span><i>›</i></button><button><span>Help &amp; User Guide<small>App version · FAQs</small></span><i>›</i></button></div><p class="version">RUN|CAL demo · No Firebase connection · v1.0.0</p></section>
+  </main>
+  <nav class="mobile"><button class="active" data-view="home">⌂<small>Home</small></button><button data-view="training">⌁<small>Training</small></button><button id="import">＋</button><button data-view="calendar">□<small>Calendar</small></button><button data-view="profile">◉<small>Profile</small></button></nav>
+</div><div class="toast" id="toast"></div></body></html>

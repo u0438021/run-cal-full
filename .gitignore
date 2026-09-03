@@ -8,3 +8,5 @@ node_modules/
 var/
 *.pyc
 coverage/
+.firebase/
+firebase-debug.log

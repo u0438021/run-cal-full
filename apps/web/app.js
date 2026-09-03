@@ -1,32 +1,6 @@
-const fileInput = document.querySelector("#fit-file");
-const statusMessage = document.querySelector("#status-message");
-
-function openFilePicker() {
-  fileInput.click();
-}
-
-document.querySelector("#upload-button").addEventListener("click", openFilePicker);
-document.querySelector("#mobile-upload").addEventListener("click", openFilePicker);
-
-fileInput.addEventListener("change", () => {
-  const count = fileInput.files.length;
-  statusMessage.textContent = count
-    ? `${count} FIT ${count === 1 ? "file" : "files"} selected. Upload connection will be added in the import workflow.`
-    : "";
-});
-
-document.querySelectorAll(".segmented button").forEach((button) => {
-  button.addEventListener("click", () => {
-    document.querySelectorAll(".segmented button").forEach((item) => item.classList.remove("selected"));
-    button.classList.add("selected");
-    statusMessage.textContent = `${button.dataset.period} chart period selected.`;
-  });
-});
-
-document.querySelectorAll("[data-page]").forEach((link) => {
-  link.addEventListener("click", () => {
-    const page = link.dataset.page;
-    document.querySelectorAll(`[data-page="${page}"]`).forEach((item) => item.classList.add("active"));
-    document.querySelectorAll(`[data-page]:not([data-page="${page}"])`).forEach((item) => item.classList.remove("active"));
-  });
-});
+const toast=document.querySelector('#toast');let timer;
+function notify(message){toast.textContent=message;toast.classList.add('show');clearTimeout(timer);timer=setTimeout(()=>toast.classList.remove('show'),2600)}
+function view(name){document.querySelectorAll('.view').forEach(x=>x.classList.toggle('active',x.id===name));document.querySelectorAll('[data-view]').forEach(x=>x.classList.toggle('active',x.dataset.view===name));window.scrollTo({top:0,behavior:'smooth'})}
+document.querySelectorAll('[data-view]').forEach(x=>x.addEventListener('click',()=>view(x.dataset.view)));
+document.querySelectorAll('[data-score]').forEach(x=>x.addEventListener('click',()=>{const n=Number(x.dataset.score);document.querySelectorAll('[data-score]').forEach(y=>y.classList.toggle('selected',Number(y.dataset.score)===n));document.querySelector('#score').textContent=n.toFixed(1);document.querySelector('#saved').textContent='Saved just now';document.querySelector('#recovery-copy').textContent=n>=4?'Good readiness. Keep today easy as planned.':'Thanks for checking in. Adjust with your coach if needed.';notify(`Recovery ${n}/5 saved in this demo.`)}));
+document.querySelector('#import').addEventListener('click',()=>notify('FIT import preview is planned for the connected app.'));document.querySelector('#comment').addEventListener('click',()=>notify('Activity comments will be available in the connected app.'));document.querySelector('#range').addEventListener('click',()=>notify('Demo range: last 8 weeks.'));
