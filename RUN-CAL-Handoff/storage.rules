@@ -1,0 +1,11 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    // FIT originals remain private. Cloud Functions/Admin SDK provide access
+    // after workspace and role authorization has been implemented.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,0 +1,62 @@
+import { signInWithCustomToken, signOut } from 'firebase/auth'
+import { httpsCallable } from 'firebase/functions'
+import { auth, functions } from './firebase'
+
+export type State = {
+  setupRequired: boolean
+  user: { id: string; username: string; email: string; displayName: string }
+  workspace: { workspaceId: string; workspaceName: string; roles: string[] }
+  profile: null | { emergencyName: string; emergencyRelation: string; emergencyPhone: string; sportGoal: string; experienceYears: number; experienceNote: string; usesStryd: number }
+  notifications: Array<{ id: string; title: string; body: string; href: string; readAt: string | null; createdAt: string }>
+  recovery: null | { sleep: number; energy: number; soreness: number; stress: number; mood: number; note: string; checkinDate: string }
+  monthly: Array<{ id: string; month: string; weightKg: number; cpWatts: number | null; wkg: number | null; comment: string; coachReply: string; createdAt: string }>
+  activities: Array<{ id: string; title: string; activityDate: string; originalName: string; byteSize: number; deletedAt: string | null }>
+  athletes: Array<{ id: string; displayName: string }>
+  members: Array<{ id: string; displayName: string; email: string; roles: string[]; isTeamAdmin: boolean }>
+}
+
+function message(error: unknown): Error {
+  if (typeof error === 'object' && error && 'message' in error && typeof error.message === 'string') return new Error(error.message)
+  return new Error('Unable to complete this request')
+}
+
+async function call<T>(name: string, data: Record<string, unknown> = {}): Promise<T> {
+  try {
+    return (await httpsCallable<Record<string, unknown>, T>(functions, name)(data)).data
+  } catch (error) {
+    throw message(error)
+  }
+}
+
+async function signIn(result: { token: string }) {
+  await signInWithCustomToken(auth, result.token)
+}
+
+function unavailable<T>(feature: string): Promise<T> {
+  return Promise.reject(new Error(`${feature} is being migrated to Firebase and is not available yet.`))
+}
+
+export const api = {
+  setupStatus: () => call<{ setupRequired: boolean }>('getSetupStatus'),
+  setup: async (body: Record<string, string>) => signIn(await call<{ token: string }>('setupFirstWorkspace', body)),
+  acceptInvite: async (body: Record<string, string>) => signIn(await call<{ token: string }>('acceptInvite', { ...body, inviteToken: body.token })),
+  login: async (username: string, pin: string) => signIn(await call<{ token: string }>('loginWithUsernamePin', { username, pin })),
+  logout: () => signOut(auth),
+  bootstrap: () => call<State>('getBootstrap'),
+  profile: (_body: Record<string, unknown>) => unavailable<void>('Profile updates'),
+  recovery: (_body: Record<string, unknown>) => unavailable<void>('Daily recovery'),
+  monthly: (_body: Record<string, unknown>) => unavailable<void>('Monthly logs'),
+  invite: async (email: string, roles: string[]) => {
+    const result = await call<{ inviteToken: string; expiresInMinutes: number }>('createInvite', { email, role: roles[0] || 'athlete' })
+    return { expiresInMinutes: result.expiresInMinutes, delivery: `Share this secure invitation link: ${window.location.origin}/?invite=${encodeURIComponent(result.inviteToken)}` }
+  },
+  requestUsername: (_email: string) => unavailable<{ message: string }>('Username lookup'),
+  verifyUsername: (_token: string) => unavailable<{ username: string }>('Username lookup'),
+  requestPinReset: (_email: string) => unavailable<{ message: string }>('PIN reset'),
+  confirmPinReset: (_token: string, _pin: string) => unavailable<void>('PIN reset'),
+  cancelInvite: (_id: string) => unavailable<void>('Invitation cancellation'),
+  startAdminTransfer: (_toUserId: string, _pin: string) => unavailable<{ transferId: string; transferToken?: string }>('Team Admin transfer'),
+  acceptAdminTransfer: (_transferId: string) => unavailable<void>('Team Admin transfer'),
+  markRead: (_id: string) => unavailable<void>('Notifications'),
+  fit: (_file: File) => unavailable<void>('FIT upload'),
+}
