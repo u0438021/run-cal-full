@@ -18,6 +18,7 @@ const dayInBangkok = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ba
   .formatToParts(new Date()).reduce((value, part) => ({ ...value, [part.type]: part.value }), {});
 const today = () => { const day = dayInBangkok(); return `${day.year}-${day.month}-${day.day}`; };
 const fitUploadId = value => /^[0-9a-f-]{36}$/i.test(String(value || ''));
+const GARMIN_FIT_SDK_VERSION = '21.214.0';
 
 function checkCredentials(username, pin) {
   if (!USERNAME.test(String(username || ''))) stop('invalid-argument', 'Username must be 4–8 letters, numbers, - or _.');
@@ -52,6 +53,40 @@ function boundedText(value, max, field, required = false) {
   if (required && !result) stop('invalid-argument', `${field} is required.`);
   if (result.length > max) stop('invalid-argument', `${field} is too long.`);
   return result;
+}
+async function parseRunningFit(bytes) {
+  const { Decoder, Stream } = await import('@garmin/fitsdk');
+  const stream = Stream.fromBuffer(bytes);
+  const decoder = new Decoder(stream);
+  if (!decoder.isFIT() || !decoder.checkIntegrity()) stop('invalid-argument', 'The FIT file failed integrity validation.');
+  const { messages, errors } = decoder.read({ includeUnknownData: false });
+  if (errors.length) stop('invalid-argument', 'The FIT file could not be decoded.');
+  const session = messages.sessionMesgs?.[0];
+  if (!session || String(session.sport || '').toLowerCase() !== 'running') stop('invalid-argument', 'Only running FIT activities are accepted.');
+  const records = messages.recordMesgs || [];
+  const start = session.startTime instanceof Date ? session.startTime : session.timestamp instanceof Date ? session.timestamp : null;
+  if (!start || Number.isNaN(start.getTime())) stop('invalid-argument', 'The FIT file has no valid activity start time.');
+  const has = field => records.some(record => record[field] !== undefined && record[field] !== null);
+  return {
+    activityDate: start.toISOString().slice(0, 10),
+    summary: {
+      startTime: start.toISOString(),
+      totalDistanceM: Number.isFinite(session.totalDistance) ? session.totalDistance : null,
+      totalTimerTimeS: Number.isFinite(session.totalTimerTime) ? session.totalTimerTime : null,
+      totalElapsedTimeS: Number.isFinite(session.totalElapsedTime) ? session.totalElapsedTime : null,
+      avgHeartRate: Number.isFinite(session.avgHeartRate) ? session.avgHeartRate : null,
+      maxHeartRate: Number.isFinite(session.maxHeartRate) ? session.maxHeartRate : null,
+      avgPower: Number.isFinite(session.avgPower) ? session.avgPower : null,
+      maxPower: Number.isFinite(session.maxPower) ? session.maxPower : null,
+    },
+    dataAvailability: {
+      gps: has('positionLat') && has('positionLong'),
+      heartRate: has('heartRate'),
+      power: has('power'),
+      cadence: has('cadence'),
+      recordCount: records.length,
+    },
+  };
 }
 
 exports.healthCheck = onRequest({ region: REGION, cors: false }, (_req, res) => res.status(200).json({ service: 'run-cal-api', status: 'ok' }));
@@ -220,37 +255,52 @@ exports.completeFitUpload = onCall({ region: REGION, timeoutSeconds: 120, memory
   if (Number(metadata.size) !== Number(upload.data().byteSize) || Number(metadata.size) > 25 * 1024 * 1024) stop('invalid-argument', 'FIT file size does not match the upload request.');
   const [bytes] = await file.download();
   const sha256 = hash(bytes);
-  const duplicates = await athleteRef.collection('activities').where('sha256', '==', sha256).limit(1).get();
-  if (!duplicates.empty) {
-    await Promise.all([file.delete({ ignoreNotFound: true }), uploadRef.update({ status: 'duplicate', duplicateOf: duplicates.docs[0].id })]);
-    stop('already-exists', 'This FIT file was already imported.');
+  let parsed;
+  try { parsed = await parseRunningFit(bytes); }
+  catch (error) {
+    await Promise.all([file.delete({ ignoreNotFound: true }), uploadRef.update({ status: 'invalid' })]);
+    if (error instanceof HttpsError) throw error;
+    stop('invalid-argument', 'The FIT file could not be decoded.');
   }
   const activityId = randomUUID();
   const originalName = upload.data().originalName;
-  const activityDate = today();
-  const batch = db.batch();
-  batch.set(athleteRef.collection('fitFiles').doc(activityId), {
-    objectKey: storagePath,
-    sha256,
-    byteSize: Number(metadata.size),
-    originalName,
-    sourceType: 'manual_upload',
-    immutable: true,
-    receivedAt: admin.firestore.FieldValue.serverTimestamp(),
-  });
-  batch.set(athleteRef.collection('activities').doc(activityId), {
-    title: originalName.replace(/\.fit$/i, ''),
-    activityDate,
-    originalName,
-    byteSize: Number(metadata.size),
-    sha256,
-    deletedAt: null,
-    importStatus: 'stored_unparsed',
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
-  });
-  batch.update(uploadRef, { status: 'completed', activityId, completedAt: admin.firestore.FieldValue.serverTimestamp() });
-  await batch.commit();
-  return { activityId, importStatus: 'stored_unparsed' };
+  const hashRef = athleteRef.collection('fitHashes').doc(sha256);
+  try {
+    await db.runTransaction(async transaction => {
+      if ((await transaction.get(hashRef)).exists) stop('already-exists', 'This FIT file was already imported.');
+      transaction.create(hashRef, { activityId, createdAt: admin.firestore.FieldValue.serverTimestamp() });
+      transaction.create(athleteRef.collection('fitFiles').doc(activityId), {
+        objectKey: storagePath,
+        sha256,
+        byteSize: Number(metadata.size),
+        originalName,
+        sourceType: 'manual_upload',
+        immutable: true,
+        parserVersion: `@garmin/fitsdk/${GARMIN_FIT_SDK_VERSION}`,
+        receivedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      transaction.create(athleteRef.collection('activities').doc(activityId), {
+        title: originalName.replace(/\.fit$/i, ''),
+        activityDate: parsed.activityDate,
+        originalName,
+        byteSize: Number(metadata.size),
+        sha256,
+        deletedAt: null,
+        importStatus: 'parsed',
+        parserVersion: `@garmin/fitsdk/${GARMIN_FIT_SDK_VERSION}`,
+        summary: parsed.summary,
+        dataAvailability: parsed.dataAvailability,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      transaction.update(uploadRef, { status: 'completed', activityId, completedAt: admin.firestore.FieldValue.serverTimestamp() });
+    });
+  } catch (error) {
+    if (error instanceof HttpsError && error.code === 'already-exists') {
+      await Promise.all([file.delete({ ignoreNotFound: true }), uploadRef.update({ status: 'duplicate' })]);
+    }
+    throw error;
+  }
+  return { activityId, importStatus: 'parsed' };
 });
 
 exports.setupFirstWorkspace = onCall({ region: REGION }, async request => {
