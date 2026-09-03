@@ -1,13 +1,14 @@
 const { onCall, onRequest, HttpsError } = require('firebase-functions/v2/https');
 const { defineJsonSecret } = require('firebase-functions/params');
 const admin = require('firebase-admin');
+const nodemailer = require('nodemailer');
 const { randomBytes, randomUUID, scryptSync, timingSafeEqual, createHash } = require('node:crypto');
 
 admin.initializeApp();
 const db = admin.firestore();
 const bucket = admin.storage().bucket();
 const REGION = 'asia-southeast1';
-const GMAIL_CONFIG = defineJsonSecret('RUN_CAL_GMAIL_OAUTH_CONFIG');
+const GMAIL_CONFIG = defineJsonSecret('RUN_CAL_GMAIL_SMTP_CONFIG');
 const PUBLIC_URL = 'https://run-cal-th.web.app';
 const USERNAME = /^[A-Za-z0-9_-]{4,8}$/;
 const PIN = /^\d{6}$/;
@@ -59,41 +60,28 @@ function boundedText(value, max, field, required = false) {
 }
 function gmailConfig() {
   const config = GMAIL_CONFIG.value();
-  if (!config || typeof config.clientId !== 'string' || !config.clientId.endsWith('.apps.googleusercontent.com') || typeof config.clientSecret !== 'string' || typeof config.refreshToken !== 'string' || !/^\S+@\S+\.\S+$/.test(String(config.from || ''))) stop('failed-precondition', 'Gmail delivery is not configured.');
-  return config;
+  const appPassword = String(config?.appPassword || '').replace(/\s/g, '');
+  if (!config || !/^\S+@\S+\.\S+$/.test(String(config.from || '')) || !/^[A-Za-z0-9]{16}$/.test(appPassword)) stop('failed-precondition', 'Gmail delivery is not configured.');
+  return { from: config.from, appPassword };
 }
 async function sendEmail({ to, subject, text, idempotencyKey }) {
   const config = gmailConfig();
-  const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: new URLSearchParams({
-      client_id: config.clientId,
-      client_secret: config.clientSecret,
-      refresh_token: config.refreshToken,
-      grant_type: 'refresh_token',
-    }),
-  });
-  if (!tokenResponse.ok) stop('failed-precondition', 'Gmail connection needs to be reconnected.');
-  const { access_token: accessToken } = await tokenResponse.json();
-  const message = [
-    `From: RUN|CAL <${config.from}>`,
-    `To: ${to}`,
-    `Subject: ${subject}`,
-    'MIME-Version: 1.0',
-    'Content-Type: text/plain; charset=UTF-8',
-    `Message-ID: <${idempotencyKey}@run-cal-th.firebaseapp.com>`,
-    '',
-    text,
-  ].join('\r\n');
-  const response = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ raw: Buffer.from(message).toString('base64url') }),
-  });
-  if (!response.ok) stop('internal', 'Email delivery failed. Please try again later.');
+  try {
+    await nodemailer.createTransport({
+      host: 'smtp.gmail.com',
+      port: 465,
+      secure: true,
+      auth: { user: config.from, pass: config.appPassword },
+    }).sendMail({
+      from: `RUN|CAL <${config.from}>`,
+      to,
+      subject,
+      text,
+      messageId: `<${idempotencyKey}@run-cal-th.firebaseapp.com>`,
+    });
+  } catch {
+    stop('internal', 'Email delivery failed. Please try again later.');
+  }
 }
 async function issueAccountToken({ purpose, uid, email }) {
   const rawToken = randomBytes(32).toString('base64url');
