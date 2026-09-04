@@ -2,6 +2,10 @@
 
 The executable starter DDL is in `infra/sql/001_init.sql`. UUIDs are externally safe identifiers; UTC `timestamptz` is used throughout. High-volume samples are separated from activity metadata and indexed by activity/time. Partition or convert the samples table to a Timescale hypertable as volume grows.
 
+SQLAlchemy models are defined in `services/api/app/models.py`. Alembic uses the starter DDL as the authoritative initial migration, so local setup and migrations cannot silently drift apart.
+
+From `services/api`, run `uv run alembic upgrade head` to apply migrations or `uv run alembic downgrade base` to roll back the initial schema.
+
 ## Main relationships
 
 ```mermaid
@@ -28,4 +32,3 @@ erDiagram
 - Athlete mass and zone settings are effective-dated so historical W/kg remains reproducible.
 - Analytics are immutable versioned results keyed by metric, period, and algorithm version.
 - Import warnings and field coverage are data, not log-only details.
-

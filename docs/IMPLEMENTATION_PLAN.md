@@ -51,7 +51,7 @@
 ## First backlog
 
 - [x] Pin dependency lockfiles and CI checks.
-- [ ] Add Alembic migrations/models matching starter DDL.
+- [x] Add Alembic migrations/models matching starter DDL.
 - [ ] Implement session middleware and authorization scopes.
 - [ ] Implement local/object storage interface and upload endpoint.
 - [ ] Integrate a FIT SDK/decoder and create sanitized golden fixtures.
