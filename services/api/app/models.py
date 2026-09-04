@@ -227,6 +227,17 @@ class ActivityDevice(Base):
 
 class ImportJob(Base):
     __tablename__ = "import_jobs"
+    __table_args__ = (
+        Index(
+            "import_jobs_active_source_uq",
+            "athlete_id",
+            "source_kind",
+            "source_reference",
+            "parser_version",
+            unique=True,
+            postgresql_where=text("status IN ('queued','processing','succeeded')"),
+        ),
+    )
     id: Mapped[UUID] = uuid_pk()
     athlete_id: Mapped[UUID] = mapped_column(ForeignKey("athletes.id"), nullable=False)
     activity_id: Mapped[UUID | None] = mapped_column(ForeignKey("activities.id"))

@@ -53,7 +53,7 @@
 - [x] Pin dependency lockfiles and CI checks.
 - [x] Add Alembic migrations/models matching starter DDL.
 - [x] Implement session middleware and authorization scopes.
-- [ ] Implement local/object storage interface and upload endpoint.
+- [x] Implement local/object storage interface and upload endpoint.
 - [ ] Integrate a FIT SDK/decoder and create sanitized golden fixtures.
 - [x] Complete metadata-driven developer-data registry and unit tests for Stryd aliases/power precedence.
 - [ ] Add sanitized Garmin/Stryd binary FIT fixtures for end-to-end parser regression tests.

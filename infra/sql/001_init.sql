@@ -112,6 +112,9 @@ CREATE TABLE import_jobs (
   warnings jsonb NOT NULL DEFAULT '[]', error_code text, error_detail text,
   created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now()
 );
+CREATE UNIQUE INDEX import_jobs_active_source_uq
+  ON import_jobs(athlete_id, source_kind, source_reference, parser_version)
+  WHERE status IN ('queued','processing','succeeded');
 
 CREATE TABLE daily_metrics (
   athlete_id uuid NOT NULL REFERENCES athletes(id), metric_date date NOT NULL,
@@ -141,4 +144,3 @@ CREATE TABLE audit_log (
   entity_type text NOT NULL, entity_id text, metadata jsonb NOT NULL DEFAULT '{}',
   occurred_at timestamptz NOT NULL DEFAULT now()
 );
-
