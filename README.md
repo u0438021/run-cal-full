@@ -11,6 +11,7 @@ Running-only MVP for importing FIT activities, normalizing Garmin/Stryd data, ca
 - [FIT field specification](docs/FIT_FIELD_MAPPING.md)
 - [Design system](docs/DESIGN_SYSTEM.md)
 - [Office computer setup](docs/OFFICE_SETUP.md)
+- [Firebase invitation hotfix](docs/FIREBASE_INVITE_HOTFIX.md)
 
 ## Repository map
 

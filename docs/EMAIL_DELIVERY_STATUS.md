@@ -13,6 +13,9 @@ Last verified: 2026-09-04 (Asia/Bangkok)
 - `createInvite`, `requestUsernameLookup`, and `requestPinReset` are deployed with both secrets.
 - Check Username was tested end-to-end: request accepted, email received, one-time link verified, and username displayed.
 - Reset PIN was tested end-to-end: request accepted, email received, one-time link opened, a new six-digit PIN set, and login confirmed with the new PIN.
+- Invitation delivery was tested: an athlete invitation was created for a non-admin email address and the application confirmed that the email was sent.
+- The invitation acceptance 500 error was traced to an invalid Firestore collection-group document-ID query. Production `createInvite` and `acceptInvite` now use a top-level `inviteIndex` document to resolve the workspace invitation path.
+- The fixed functions were deployed successfully, and a new invitation request completed with HTTP 200 on the new revision.
 
 ## Operational behavior
 
@@ -27,4 +30,7 @@ Last verified: 2026-09-04 (Asia/Bangkok)
 - [x] Open the newest reset link once.
 - [x] Set a new six-digit PIN without exposing it in chat or logs.
 - [x] Confirm login with the new PIN.
-- [ ] Test an invitation to a non-admin test account.
+- [x] Create an athlete invitation for a non-admin test email.
+- [x] Confirm that the application reports the invitation email was sent.
+- [ ] Open the newest invitation link once and complete account creation.
+- [ ] Confirm login for the invited account.
