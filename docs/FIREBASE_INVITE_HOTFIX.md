@@ -20,4 +20,4 @@ The plaintext invitation token, Username, PIN, and Gmail credentials must never 
 - `createInvite`: deployed successfully.
 - `acceptInvite`: deployed successfully.
 - A new athlete invitation was created after deployment; the callable request returned HTTP 200.
-
+- The invited user completed account creation successfully using the new invitation link.
