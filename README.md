@@ -10,6 +10,7 @@ Running-only MVP for importing FIT activities, normalizing Garmin/Stryd data, ca
 - [Implementation plan](docs/IMPLEMENTATION_PLAN.md)
 - [FIT field specification](docs/FIT_FIELD_MAPPING.md)
 - [Design system](docs/DESIGN_SYSTEM.md)
+- [Office computer setup](docs/OFFICE_SETUP.md)
 
 ## Repository map
 

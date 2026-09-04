@@ -10,6 +10,7 @@
 
 - Username + six-digit PIN, Argon2id/pepper, sessions, lockout/rate limits, RBAC.
 - Athlete profiles, effective-dated weight and zones, coach assignment, audit log.
+- Gmail delivery and Check Username are verified in the current `run-cal-th` deployment; see [EMAIL_DELIVERY_STATUS.md](EMAIL_DELIVERY_STATUS.md).
 - Exit: role/isolation tests and complete login/reset/logout flows.
 
 ## Phase 2 — Manual FIT ingestion (1–2 weeks)
@@ -54,7 +55,8 @@
 - [ ] Implement session middleware and authorization scopes.
 - [ ] Implement local/object storage interface and upload endpoint.
 - [ ] Integrate a FIT SDK/decoder and create sanitized golden fixtures.
-- [ ] Complete developer-data registry and Stryd fixture tests.
+- [x] Complete metadata-driven developer-data registry and unit tests for Stryd aliases/power precedence.
+- [ ] Add sanitized Garmin/Stryd binary FIT fixtures for end-to-end parser regression tests.
 - [ ] Persist activities atomically and expose import status.
 - [ ] Implement metric contracts before chart components.
 - [ ] Add Drive OAuth and folder mapper only after manual ingestion is stable.
@@ -63,4 +65,3 @@
 ## Definition of done
 
 Code is typed/linted/tested; migrations support rollback; API is authorized and documented; empty/error/loading states exist; calculations include version/coverage; logs contain no secrets or raw PINs; and operational runbooks cover retry, reprocess, backup, and restore.
-
