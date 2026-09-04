@@ -4,13 +4,18 @@ from uuid import UUID
 
 from fastapi import APIRouter, File, HTTPException, UploadFile, status
 
+from ..dependencies import AthleteAccess
 from ..fit.parser import parse_running_fit
 
 router = APIRouter()
 
 
 @router.post("/athletes/{athlete_id}/fit-files", status_code=status.HTTP_202_ACCEPTED)
-async def upload_fit(athlete_id: UUID, file: Annotated[UploadFile, File(...)]) -> dict:
+async def upload_fit(
+    athlete_id: UUID,
+    file: Annotated[UploadFile, File(...)],
+    _access: AthleteAccess,
+) -> dict:
     """Development preview; production streams to storage and enqueues a job."""
     if not (file.filename or "").lower().endswith(".fit"):
         raise HTTPException(415, "Only .fit files are accepted")

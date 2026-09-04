@@ -52,7 +52,7 @@
 
 - [x] Pin dependency lockfiles and CI checks.
 - [x] Add Alembic migrations/models matching starter DDL.
-- [ ] Implement session middleware and authorization scopes.
+- [x] Implement session middleware and authorization scopes.
 - [ ] Implement local/object storage interface and upload endpoint.
 - [ ] Integrate a FIT SDK/decoder and create sanitized golden fixtures.
 - [x] Complete metadata-driven developer-data registry and unit tests for Stryd aliases/power precedence.

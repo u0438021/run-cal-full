@@ -1,10 +1,25 @@
+from uuid import UUID
+
 from fastapi.testclient import TestClient
 
+from app.dependencies import CurrentUser, authorize_athlete_access
 from app.main import app
 from app.routers import imports
 
 client = TestClient(app)
 ATHLETE_ID = "00000000-0000-0000-0000-000000000001"
+
+
+def allow_test_athlete() -> CurrentUser:
+    return CurrentUser(
+        id=UUID("00000000-0000-0000-0000-000000000002"),
+        username="test-admin",
+        role="admin",
+        session_id=UUID("00000000-0000-0000-0000-000000000003"),
+    )
+
+
+app.dependency_overrides[authorize_athlete_access] = allow_test_athlete
 
 
 def test_fit_validation_error_is_returned_as_unprocessable(monkeypatch) -> None:
