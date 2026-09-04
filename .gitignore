@@ -5,11 +5,13 @@ __pycache__/
 .ruff_cache/
 .mypy_cache/
 .uv-cache/
+.pnpm-store/
 node_modules/
 .next/
 dist/
 var/
 *.pyc
+*.tsbuildinfo
 *.sqlite-shm
 *.sqlite-wal
 coverage/

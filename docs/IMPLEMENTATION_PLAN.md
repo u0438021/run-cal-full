@@ -50,7 +50,7 @@
 
 ## First backlog
 
-- [ ] Pin dependency lockfiles and CI checks.
+- [x] Pin dependency lockfiles and CI checks.
 - [ ] Add Alembic migrations/models matching starter DDL.
 - [ ] Implement session middleware and authorization scopes.
 - [ ] Implement local/object storage interface and upload endpoint.
