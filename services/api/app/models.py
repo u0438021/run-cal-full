@@ -243,6 +243,8 @@ class ImportJob(Base):
     activity_id: Mapped[UUID | None] = mapped_column(ForeignKey("activities.id"))
     source_kind: Mapped[str] = mapped_column(Text, nullable=False)
     source_reference: Mapped[str] = mapped_column(Text, nullable=False)
+    source_file_name: Mapped[str] = mapped_column(Text, nullable=False)
+    source_object_key: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(Text, nullable=False)
     attempts: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     parser_version: Mapped[str] = mapped_column(Text, nullable=False)

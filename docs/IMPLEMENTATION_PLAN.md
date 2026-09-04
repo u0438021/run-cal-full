@@ -57,7 +57,7 @@
 - [ ] Integrate a FIT SDK/decoder and create sanitized golden fixtures.
 - [x] Complete metadata-driven developer-data registry and unit tests for Stryd aliases/power precedence.
 - [x] Add sanitized Garmin/Stryd binary FIT fixtures for end-to-end parser regression tests.
-- [ ] Persist activities atomically and expose import status.
+- [x] Persist activities atomically and expose import status.
 - [ ] Implement metric contracts before chart components.
 - [ ] Add Drive OAuth and folder mapper only after manual ingestion is stable.
 - [ ] Add AI last, after deterministic evidence and analytics are trustworthy.

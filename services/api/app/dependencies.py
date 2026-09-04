@@ -64,9 +64,7 @@ def get_current_user(request: Request, database: DbSession) -> CurrentUser:
 AuthenticatedUser = Annotated[CurrentUser, Depends(get_current_user)]
 
 
-def authorize_athlete_access(
-    athlete_id: UUID, user: AuthenticatedUser, database: DbSession
-) -> CurrentUser:
+def ensure_athlete_access(athlete_id: UUID, user: CurrentUser, database: Session) -> CurrentUser:
     if user.role == "admin":
         return user
     if user.role == "athlete":
@@ -85,6 +83,12 @@ def authorize_athlete_access(
         if assignment is not None:
             return user
     raise HTTPException(status.HTTP_403_FORBIDDEN, "Athlete access denied")
+
+
+def authorize_athlete_access(
+    athlete_id: UUID, user: AuthenticatedUser, database: DbSession
+) -> CurrentUser:
+    return ensure_athlete_access(athlete_id, user, database)
 
 
 AthleteAccess = Annotated[CurrentUser, Depends(authorize_athlete_access)]

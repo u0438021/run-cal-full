@@ -33,3 +33,4 @@ erDiagram
 - Analytics are immutable versioned results keyed by metric, period, and algorithm version.
 - Import warnings and field coverage are data, not log-only details.
 - Manual uploads are stored under a private athlete-scoped, SHA-256-addressed object key. Active import jobs have a partial unique index so retries cannot queue duplicate work for the same parser version.
+- Import processing commits the activity and all samples, laps, events, and devices in one transaction. A failed child write rolls the graph back before the job is marked failed in a separate transaction.

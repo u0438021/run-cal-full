@@ -26,10 +26,18 @@ class StoredObject:
 class FitStorage(Protocol):
     async def save(self, athlete_id: UUID, upload: UploadFile) -> StoredObject: ...
 
+    def path_for(self, key: str) -> Path: ...
+
 
 class LocalFitStorage:
     def __init__(self, root: Path):
         self.root = root.resolve()
+
+    def path_for(self, key: str) -> Path:
+        candidate = (self.root / key).resolve()
+        if candidate != self.root and self.root not in candidate.parents:
+            raise ValueError("Object key escapes private storage root")
+        return candidate
 
     async def save(self, athlete_id: UUID, upload: UploadFile) -> StoredObject:
         athlete_directory = self.root / str(athlete_id)
@@ -52,7 +60,7 @@ class LocalFitStorage:
 
             source_hash = digest.hexdigest()
             key = f"{athlete_id}/{source_hash}.fit"
-            destination = self.root / key
+            destination = self.path_for(key)
             already_existed = destination.exists()
             if already_existed:
                 temporary_path.unlink(missing_ok=True)

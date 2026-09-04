@@ -108,6 +108,7 @@ CREATE TABLE activity_devices (
 CREATE TABLE import_jobs (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(), athlete_id uuid NOT NULL REFERENCES athletes(id),
   activity_id uuid REFERENCES activities(id), source_kind text NOT NULL, source_reference text NOT NULL,
+  source_file_name text NOT NULL, source_object_key text NOT NULL,
   status text NOT NULL, attempts integer NOT NULL DEFAULT 0, parser_version text NOT NULL,
   warnings jsonb NOT NULL DEFAULT '[]', error_code text, error_detail text,
   created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now()
