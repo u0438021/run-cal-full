@@ -35,7 +35,9 @@ Field definition numbers are local to an app/developer data index and can change
   -> developer/app identity, field_name, units, scale, offset, native_mesg_num, native_field_num
 ```
 
-Normalize field names case-insensitively after removing spaces, punctuation, and unit suffixes. Accept an explicitly tested alias set (for example running power, form power, air power, leg spring stiffness), verify compatible units, and record the original description. Native overrides are hints, not sufficient proof that a field is Stryd. Identify Stryd from developer/application identity and fixture-verified metadata; otherwise retain it as an unknown developer field.
+Normalize field names case-insensitively after removing spaces, punctuation, and unit suffixes. Accept an explicitly tested alias set (for example running power, form power, air power, leg spring stiffness), verify compatible units, and record the original description. Native overrides are hints, not sufficient proof that a field is Stryd. Identify Stryd from developer/application identity. Some valid files omit the manufacturer ID; for those files require the combined metadata signature `Power` + `Form Power` + `Air Power` + `Leg Spring Stiffness`. Otherwise retain the data as unknown developer fields. Field numbers are never treated as stable identifiers.
+
+Native FIT `stance_time`, `vertical_oscillation`, and `step_length` are fallback sources for standardized running-dynamics fields when equivalent Developer Data is absent.
 
 ## Power selection
 
@@ -51,4 +53,3 @@ Normalize field names case-insensitively after removing spaces, punctuation, and
 - Physiological/dynamic range checks flag rather than silently clamp.
 - Gaps, pauses, sensor dropouts, power/HR/GPS coverage, and field source reported.
 - Summary totals cross-checked against record-derived totals with tolerances.
-

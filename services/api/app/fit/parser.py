@@ -103,11 +103,21 @@ def build_developer_registry(
     developer_ids: Iterable[Mapping[str, Any]] = (),
 ) -> dict[tuple[int, int], dict[str, Any]]:
     """Resolve developer fields from FIT metadata, never fixed field numbers."""
+    descriptions = [dict(item) for item in descriptions]
     identities = {
         int(item["developer_data_index"]): dict(item)
         for item in developer_ids
         if item.get("developer_data_index") is not None
     }
+    field_signatures: dict[int, set[str]] = {}
+    for item in descriptions:
+        if item.get("developer_data_index") is None:
+            continue
+        developer_index = int(item["developer_data_index"])
+        field_signatures.setdefault(developer_index, set()).add(
+            _canonical_name(str(item.get("field_name") or ""))
+        )
+    stryd_signature = {"power", "formpower", "airpower", "legspringstiffness"}
     registry: dict[tuple[int, int], dict[str, Any]] = {}
     for item in descriptions:
         developer_index = item.get("developer_data_index")
@@ -118,7 +128,9 @@ def build_developer_registry(
         field_number = int(field_number)
         name = str(item.get("field_name") or "")
         identity = identities.get(developer_index, {})
-        verified_source = "stryd" if _is_stryd_identity(identity) else None
+        verified_by_identity = _is_stryd_identity(identity)
+        verified_by_signature = stryd_signature <= field_signatures.get(developer_index, set())
+        verified_source = "stryd" if verified_by_identity or verified_by_signature else None
         canonical = (
             _canonical_developer_field(name, item.get("units"))
             if verified_source == "stryd"
@@ -138,6 +150,11 @@ def build_developer_registry(
             "application_id": identity.get("application_id"),
             "manufacturer_id": identity.get("manufacturer_id"),
             "verified_source": verified_source,
+            "verification_method": (
+                "manufacturer" if verified_by_identity
+                else "field_signature" if verified_by_signature
+                else None
+            ),
         }
     return registry
 
@@ -181,6 +198,9 @@ def normalize_record(
     developer, raw_developer = _developer_values(developer_values or {}, registry or {})
     native_power = _number(fields.get("power"))
     stryd_power = developer.get("stryd_power_w")
+    native_stride_length = _number(_first(fields, "step_length", "stride_length"))
+    if native_stride_length is not None and native_stride_length > 10:
+        native_stride_length /= 1000.0
     return {
         "timestamp": fields.get("timestamp"),
         "distance_m": _number(fields.get("distance")),
@@ -202,9 +222,21 @@ def normalize_record(
         "form_power_w": developer.get("form_power_w"),
         "air_power_w": developer.get("air_power_w"),
         "leg_spring_stiffness_kn_m": developer.get("leg_spring_stiffness_kn_m"),
-        "ground_contact_time_ms": developer.get("ground_contact_time_ms"),
-        "vertical_oscillation_mm": developer.get("vertical_oscillation_mm"),
-        "stride_length_m": developer.get("stride_length_m"),
+        "ground_contact_time_ms": (
+            developer.get("ground_contact_time_ms")
+            if developer.get("ground_contact_time_ms") is not None
+            else _number(fields.get("stance_time"))
+        ),
+        "vertical_oscillation_mm": (
+            developer.get("vertical_oscillation_mm")
+            if developer.get("vertical_oscillation_mm") is not None
+            else _number(fields.get("vertical_oscillation"))
+        ),
+        "stride_length_m": (
+            developer.get("stride_length_m")
+            if developer.get("stride_length_m") is not None
+            else native_stride_length
+        ),
         "raw_fields": dict(fields),
         "raw_developer_fields": raw_developer,
     }

@@ -1,3 +1,5 @@
+import pytest
+
 from app.fit.parser import build_developer_registry, normalize_record
 
 STRYD_ID = {"developer_data_index": 0, "manufacturer_id": "stryd"}
@@ -61,3 +63,34 @@ def test_incompatible_units_are_retained_but_not_normalized() -> None:
 
     assert sample["stryd_power_w"] is None
     assert sample["raw_developer_fields"][0]["units"] == "bpm"
+
+
+def test_stryd_field_signature_is_used_when_manufacturer_is_omitted() -> None:
+    descriptions = [
+        {
+            "developer_data_index": 0,
+            "field_definition_number": index,
+            "field_name": name,
+            "units": units,
+        }
+        for index, (name, units) in enumerate([
+            ("Power", "Watts"),
+            ("Form Power", "Watts"),
+            ("Air Power", "Watts"),
+            ("Leg Spring Stiffness", "kN/m"),
+        ])
+    ]
+    registry = build_developer_registry(descriptions, [{"developer_data_index": 0}])
+
+    assert registry[(0, 0)]["canonical_field"] == "stryd_power_w"
+    assert registry[(0, 0)]["verification_method"] == "field_signature"
+
+
+def test_native_running_dynamics_fill_standardized_fields() -> None:
+    sample = normalize_record(
+        {"stance_time": 276.1, "vertical_oscillation": 56.7, "step_length": 833.1}
+    )
+
+    assert sample["ground_contact_time_ms"] == 276.1
+    assert sample["vertical_oscillation_mm"] == 56.7
+    assert sample["stride_length_m"] == pytest.approx(0.8331)
