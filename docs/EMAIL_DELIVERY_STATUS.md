@@ -17,6 +17,7 @@ Last verified: 2026-09-04 (Asia/Bangkok)
 - The invitation acceptance 500 error was traced to an invalid Firestore collection-group document-ID query. Production `createInvite` and `acceptInvite` now use a top-level `inviteIndex` document to resolve the workspace invitation path.
 - The fixed functions were deployed successfully, and a new invitation request completed with HTTP 200 on the new revision.
 - The newest invitation link was opened once and account creation completed successfully after the hotfix.
+- Login with the newly invited athlete account was confirmed successfully.
 
 ## Operational behavior
 
@@ -34,4 +35,4 @@ Last verified: 2026-09-04 (Asia/Bangkok)
 - [x] Create an athlete invitation for a non-admin test email.
 - [x] Confirm that the application reports the invitation email was sent.
 - [x] Open the newest invitation link once and complete account creation.
-- [ ] Confirm login for the invited account.
+- [x] Confirm login for the invited account.
