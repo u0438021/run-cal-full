@@ -76,6 +76,10 @@ def _bearer(authorization: str | None = Header(None)) -> dict:
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(401, "Authentication required")
     try:
+        # Firebase Admin Auth needs the default app before token verification.
+        # Cloud Run starts with no initialized app, so do this before asking
+        # Firebase whether the token has been revoked.
+        _firebase_clients()
         return auth.verify_id_token(
             authorization.removeprefix("Bearer ").strip(), check_revoked=True
         )
