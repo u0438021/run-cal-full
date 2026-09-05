@@ -20,7 +20,11 @@ router = APIRouter()
 ACTIVE_IMPORT_STATES = ("queued", "processing", "succeeded")
 
 
-@router.post("/athletes/{athlete_id}/fit-files", status_code=status.HTTP_202_ACCEPTED)
+@router.post(
+    "/athletes/{athlete_id}/fit-files",
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(verify_csrf)],
+)
 async def upload_fit(
     athlete_id: UUID,
     response: Response,
@@ -100,9 +104,7 @@ def _job_for_user(import_job_id: UUID, user: AuthenticatedUser, database: DbSess
 
 
 @router.get("/imports/{import_job_id}")
-def import_status(
-    import_job_id: UUID, user: AuthenticatedUser, database: DbSession
-) -> dict:
+def import_status(import_job_id: UUID, user: AuthenticatedUser, database: DbSession) -> dict:
     job = _job_for_user(import_job_id, user, database)
     return {
         "id": str(job.id),

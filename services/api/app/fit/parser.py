@@ -9,7 +9,7 @@ from typing import Any
 
 import fitdecode  # type: ignore[import-untyped]
 
-PARSER_VERSION = "0.2.0"
+PARSER_VERSION = "0.3.0"
 SEMICIRCLES_TO_DEGREES = 180.0 / (2**31)
 
 _DEVELOPER_ALIASES = {
@@ -34,7 +34,12 @@ _COMPATIBLE_UNITS = {
     "leg_spring_stiffness_kn_m": {"knm", "knpermeter", "nm", "newtonpermeter"},
     "ground_contact_time_ms": {"ms", "millisecond", "milliseconds"},
     "vertical_oscillation_mm": {
-        "mm", "millimeter", "millimeters", "cm", "centimeter", "centimeters"
+        "mm",
+        "millimeter",
+        "millimeters",
+        "cm",
+        "centimeter",
+        "centimeters",
     },
     "stride_length_m": {"m", "meter", "meters"},
 }
@@ -151,8 +156,10 @@ def build_developer_registry(
             "manufacturer_id": identity.get("manufacturer_id"),
             "verified_source": verified_source,
             "verification_method": (
-                "manufacturer" if verified_by_identity
-                else "field_signature" if verified_by_signature
+                "manufacturer"
+                if verified_by_identity
+                else "field_signature"
+                if verified_by_signature
                 else None
             ),
         }
@@ -167,23 +174,25 @@ def _developer_values(
     raw: list[dict[str, Any]] = []
     for key, value in values.items():
         metadata = dict(registry.get(key, {}))
-        raw.append({
-            "developer_data_index": key[0],
-            "field_definition_number": key[1],
-            "value": value,
-            **metadata,
-        })
+        raw.append(
+            {
+                "developer_data_index": key[0],
+                "field_definition_number": key[1],
+                "value": value,
+                **metadata,
+            }
+        )
         canonical = metadata.get("canonical_field")
         number = _number(value)
         if not canonical or number is None:
             continue
         units = _canonical_name(str(metadata.get("units") or ""))
-        if canonical == "leg_spring_stiffness_kn_m" and units in {
-            "nm", "newtonpermeter"
-        }:
+        if canonical == "leg_spring_stiffness_kn_m" and units in {"nm", "newtonpermeter"}:
             number /= 1000.0
         elif canonical == "vertical_oscillation_mm" and units in {
-            "cm", "centimeter", "centimeters"
+            "cm",
+            "centimeter",
+            "centimeters",
         }:
             number *= 10.0
         normalized[str(canonical)] = number
@@ -198,6 +207,13 @@ def normalize_record(
     developer, raw_developer = _developer_values(developer_values or {}, registry or {})
     native_power = _number(fields.get("power"))
     stryd_power = developer.get("stryd_power_w")
+    cadence = _number(fields.get("cadence"))
+    # Running FIT cadence is cycles/minute; one cycle contains two steps.
+    cadence_spm = (
+        (cadence + (_number(fields.get("fractional_cadence")) or 0)) * 2
+        if cadence is not None
+        else None
+    )
     native_stride_length = _number(_first(fields, "step_length", "stride_length"))
     if native_stride_length is not None and native_stride_length > 10:
         native_stride_length /= 1000.0
@@ -210,13 +226,15 @@ def normalize_record(
         "longitude_deg": _coordinate(fields.get("position_long")),
         "elevation_m": _number(_first(fields, "enhanced_altitude", "altitude")),
         "grade_pct": _number(fields.get("grade")),
-        "cadence_spm": _number(fields.get("cadence")),
+        "cadence_spm": cadence_spm,
         "native_power_w": native_power,
         "stryd_power_w": stryd_power,
         "power_w": stryd_power if stryd_power is not None else native_power,
         "power_source": (
-            "stryd_developer" if stryd_power is not None
-            else "native_fit" if native_power is not None
+            "stryd_developer"
+            if stryd_power is not None
+            else "native_fit"
+            if native_power is not None
             else None
         ),
         "form_power_w": developer.get("form_power_w"),
@@ -250,8 +268,13 @@ def _coverage(samples: list[dict[str, Any]], field: str) -> float:
 
 def parse_running_fit(data: bytes, filename: Path) -> dict[str, Any]:
     messages: dict[str, list[dict[str, Any]]] = {
-        "session": [], "lap": [], "event": [], "record": [],
-        "device_info": [], "developer_data_id": [], "field_description": [],
+        "session": [],
+        "lap": [],
+        "event": [],
+        "record": [],
+        "device_info": [],
+        "developer_data_id": [],
+        "field_description": [],
     }
     record_frames: list[Any] = []
     try:
@@ -279,9 +302,7 @@ def parse_running_fit(data: bytes, filename: Path) -> dict[str, Any]:
         normalize_record(fields, registry, _developer_field_map(frame))
         for fields, frame in zip(messages["record"], record_frames, strict=True)
     ]
-    timestamps = [
-        item["timestamp"] for item in samples if isinstance(item["timestamp"], datetime)
-    ]
+    timestamps = [item["timestamp"] for item in samples if isinstance(item["timestamp"], datetime)]
     return {
         "parser_version": PARSER_VERSION,
         "file_name": filename.name,
@@ -314,7 +335,10 @@ def parse_running_fit(data: bytes, filename: Path) -> dict[str, Any]:
             "coverage": {
                 field: _coverage(samples, field)
                 for field in (
-                    "heart_rate_bpm", "latitude_deg", "speed_mps", "power_w",
+                    "heart_rate_bpm",
+                    "latitude_deg",
+                    "speed_mps",
+                    "power_w",
                     "stryd_power_w",
                 )
             },

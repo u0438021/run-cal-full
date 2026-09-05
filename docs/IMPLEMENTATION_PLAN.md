@@ -54,14 +54,16 @@
 - [x] Add Alembic migrations/models matching starter DDL.
 - [x] Implement session middleware and authorization scopes.
 - [x] Implement local/object storage interface and upload endpoint.
-- [ ] Integrate a FIT SDK/decoder and create sanitized golden fixtures.
+- [x] Integrate a FIT SDK/decoder and create sanitized golden fixtures.
 - [x] Complete metadata-driven developer-data registry and unit tests for Stryd aliases/power precedence.
 - [x] Add sanitized Garmin/Stryd binary FIT fixtures for end-to-end parser regression tests.
 - [x] Persist activities atomically and expose import status.
-- [ ] Implement metric contracts before chart components.
+- [x] Implement initial activity metric contracts before chart components (activity-v1; see ANALYTICS_STATUS.md for remaining metrics).
 - [ ] Add Drive OAuth and folder mapper only after manual ingestion is stable.
 - [ ] Add AI last, after deterministic evidence and analytics are trustworthy.
 
 ## Definition of done
+
+Current verified scope and remaining release gates: [Analytics status](ANALYTICS_STATUS.md).
 
 Code is typed/linted/tested; migrations support rollback; API is authorized and documented; empty/error/loading states exist; calculations include version/coverage; logs contain no secrets or raw PINs; and operational runbooks cover retry, reprocess, backup, and restore.

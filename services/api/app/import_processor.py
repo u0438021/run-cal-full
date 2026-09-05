@@ -98,7 +98,17 @@ def _event_models(activity_id: UUID, events: list[dict[str, Any]]) -> list[Activ
             continue
         event_name = str(event.get("event") or "unknown")
         event_data = event.get("event_type")
-        timer_running = True if event_data == "start" else False if event_data == "stop" else None
+        timer_running = (
+            (
+                True
+                if event_data == "start"
+                else False
+                if event_data in {"stop", "stop_all", "stop_disable", "stop_disable_all"}
+                else None
+            )
+            if event_name == "timer"
+            else None
+        )
         models.append(
             ActivityEvent(
                 activity_id=activity_id,
@@ -117,7 +127,9 @@ def _device_models(activity_id: UUID, devices: list[dict[str, Any]]) -> list[Act
         ActivityDevice(
             activity_id=activity_id,
             device_index=device.get("device_index"),
-            manufacturer=str(device["manufacturer"]) if device.get("manufacturer") is not None else None,
+            manufacturer=str(device["manufacturer"])
+            if device.get("manufacturer") is not None
+            else None,
             product=str(device.get("garmin_product") or device.get("product"))
             if device.get("garmin_product") is not None or device.get("product") is not None
             else None,
@@ -128,7 +140,8 @@ def _device_models(activity_id: UUID, devices: list[dict[str, Any]]) -> list[Act
             if device.get("software_version") is not None
             else None,
             sensor_type=str(device.get("antplus_device_type") or device.get("source_type"))
-            if device.get("antplus_device_type") is not None or device.get("source_type") is not None
+            if device.get("antplus_device_type") is not None
+            or device.get("source_type") is not None
             else None,
             raw_fields=_json_safe(device),
         )
@@ -176,6 +189,23 @@ def build_activity_graph(job: ImportJob, parsed: dict[str, Any]) -> tuple[Activi
     children.extend(_lap_models(activity.id, parsed.get("laps", [])))
     children.extend(_event_models(activity.id, parsed.get("events", [])))
     children.extend(_device_models(activity.id, parsed.get("devices", [])))
+    timer_events = sorted(
+        (e for e in children if isinstance(e, ActivityEvent) and e.timer_running is not None),
+        key=lambda e: e.occurred_at,
+    )
+    event_index = 0
+    running = True
+    for sample in sorted(
+        (s for s in children if isinstance(s, ActivitySample)),
+        key=lambda s: (s.recorded_at, s.sequence),
+    ):
+        while (
+            event_index < len(timer_events)
+            and timer_events[event_index].occurred_at <= sample.recorded_at
+        ):
+            running = timer_events[event_index].timer_running
+            event_index += 1
+        sample.is_timer_running = running
     return activity, children
 
 

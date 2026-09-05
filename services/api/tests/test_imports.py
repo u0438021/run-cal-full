@@ -4,7 +4,7 @@ from uuid import UUID, uuid4
 import pytest
 from fastapi.testclient import TestClient
 
-from app.dependencies import CurrentUser, authorize_athlete_access, get_db
+from app.dependencies import CurrentUser, authorize_athlete_access, get_db, verify_csrf
 from app.main import app
 from app.models import Activity, ImportJob
 from app.storage import StoredObject, get_fit_storage
@@ -55,6 +55,7 @@ def dependency_overrides():
     app.dependency_overrides[authorize_athlete_access] = allow_test_athlete
     app.dependency_overrides[get_db] = lambda: database
     app.dependency_overrides[get_fit_storage] = FakeStorage
+    app.dependency_overrides[verify_csrf] = lambda: None
     yield database
     app.dependency_overrides.clear()
 
@@ -98,3 +99,12 @@ def test_non_fit_extension_is_rejected() -> None:
     )
 
     assert response.status_code == 415
+
+
+def test_upload_requires_csrf():
+    del app.dependency_overrides[verify_csrf]
+    response = client.post(
+        f"/v1/athletes/{ATHLETE_ID}/fit-files",
+        files={"file": ("run.fit", b"fit-bytes", "application/octet-stream")},
+    )
+    assert response.status_code == 403

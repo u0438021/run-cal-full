@@ -8,6 +8,8 @@ Running-only MVP for importing FIT activities, normalizing Garmin/Stryd data, ca
 - [System architecture](docs/ARCHITECTURE.md)
 - [Database schema](docs/DATABASE.md)
 - [Implementation plan](docs/IMPLEMENTATION_PLAN.md)
+- [Current analytics implementation and release gates](docs/ANALYTICS_STATUS.md)
+- [Firebase analytics deployment](docs/FIREBASE_ANALYTICS_DEPLOYMENT.md)
 - [FIT field specification](docs/FIT_FIELD_MAPPING.md)
 - [Design system](docs/DESIGN_SYSTEM.md)
 - [Office computer setup](docs/OFFICE_SETUP.md)
