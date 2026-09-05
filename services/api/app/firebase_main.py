@@ -102,7 +102,7 @@ def _activity_refs(database, uid: str, activity_id: str):
     return (
         workspace_id,
         athlete.collection("activities").document(activity_id),
-        athlete.collection("fitFiles").document(activity_id),
+        athlete.collection("activities").document(activity_id).collection("fitFiles").document(activity_id),
         athlete.collection("monthly"),
     )
 
