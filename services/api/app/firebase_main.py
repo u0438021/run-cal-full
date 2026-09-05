@@ -258,6 +258,45 @@ def dashboard_summary(claims: Annotated[dict, Depends(_bearer)]) -> dict:
     }
 
 
+@app.get("/v1/profile")
+def get_profile(claims: Annotated[dict, Depends(_bearer)]) -> dict:
+    uid = claims.get("uid") or claims.get("sub")
+    if not isinstance(uid, str) or not uid:
+        raise HTTPException(401, "Invalid session")
+    database, _bucket = _firebase_clients()
+    _workspace, athlete = _athlete_ref(database, uid)
+    data = athlete.get().to_dict() or {}
+    return {
+        key: data.get(key)
+        for key in ("weightKg", "targetPaceSecondsPerKm", "maxHeartRate")
+    }
+
+
+@app.post("/v1/profile")
+def save_profile(profile: dict[str, Any], claims: Annotated[dict, Depends(_bearer)]) -> dict:
+    uid = claims.get("uid") or claims.get("sub")
+    if not isinstance(uid, str) or not uid:
+        raise HTTPException(401, "Invalid session")
+    normalized: dict[str, float | None] = {}
+    limits = {
+        "weightKg": (25, 300),
+        "targetPaceSecondsPerKm": (120, 1800),
+        "maxHeartRate": (100, 260),
+    }
+    for key, (minimum, maximum) in limits.items():
+        value = profile.get(key)
+        if value in (None, ""):
+            normalized[key] = None
+        elif isinstance(value, (int, float)) and minimum <= float(value) <= maximum:
+            normalized[key] = float(value)
+        else:
+            raise HTTPException(400, f"{key} is invalid")
+    database, _bucket = _firebase_clients()
+    _workspace, athlete = _athlete_ref(database, uid)
+    athlete.set({**normalized, "profileUpdatedAt": firestore.SERVER_TIMESTAMP}, merge=True)
+    return normalized
+
+
 @app.post("/v1/activities/{activity_id}/analyze")
 def analyze_activity(activity_id: str, claims: Annotated[dict, Depends(_bearer)]) -> dict:
     try:

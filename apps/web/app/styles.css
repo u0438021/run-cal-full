@@ -34,6 +34,9 @@ button:disabled { cursor: wait; opacity: .6; }
 .week-bars { display: flex; align-items: end; gap: 12px; height: 135px; margin-top: 18px; }
 .week-bars div { flex: 1; min-width: 26px; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: end; gap: 7px; }
 .week-bars i { width: 100%; min-height: 8px; background: var(--ink); border-radius: 7px 7px 2px 2px; }
+.profile-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 16px; align-items: end; margin-top: 22px; }
+.profile-form label { display: grid; gap: 8px; font-size: 13px; font-weight: 700; }
+.coaching ul { display: grid; gap: 10px; padding-left: 22px; line-height: 1.5; }
 .run-list { display: grid; gap: 8px; margin: 20px 0; }
 .run-list button { display: flex; flex-wrap: wrap; gap: 20px; justify-content: space-between; padding: 18px; background: var(--paper); border: 1px solid var(--line); border-radius: 12px; text-align: left; }
 .run-list button[aria-pressed="true"] { background: var(--lime); }
