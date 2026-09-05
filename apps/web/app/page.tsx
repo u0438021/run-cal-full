@@ -54,6 +54,18 @@ export default function Dashboard() {
     finally { setBusy(false); }
   }
 
+  async function resetPassword() {
+    setError("");
+    if (!email) { setError("กรุณากรอกอีเมลก่อนกดรีเซ็ตรหัสผ่าน"); return; }
+    setBusy(true);
+    try {
+      await initializeFirebase().auth.sendPasswordResetEmail(email);
+      setMessage("ส่งลิงก์ตั้งรหัสผ่านใหม่ไปที่อีเมลแล้ว");
+    } catch {
+      setError("ไม่สามารถส่งลิงก์รีเซ็ตรหัสผ่านได้ โปรดตรวจสอบอีเมล");
+    } finally { setBusy(false); }
+  }
+
   async function uploadAndAnalyze(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!file || !user) return;
@@ -87,7 +99,7 @@ export default function Dashboard() {
     <header className="topbar"><div><p className="kicker">RUN | CAL</p><h1>Running analytics</h1></div>{user && <button onClick={() => initializeFirebase().auth.signOut()}>ออกจากระบบ</button>}</header>
     {error && <p className="error" role="alert">{error}</p>}
     {message && <p role="status">{message}</p>}
-    {!ready ? null : !user ? <form className="login-form recent" onSubmit={login}><h2>เข้าสู่ระบบ</h2><label>อีเมล<input type="email" value={email} onChange={e => setEmail(e.target.value)} required /></label><label>รหัสผ่าน<input type="password" value={password} onChange={e => setPassword(e.target.value)} required /></label><button className="upload" disabled={busy}>เข้าสู่ระบบ</button></form> : <>
+    {!ready ? null : !user ? <form className="login-form recent" onSubmit={login}><h2>เข้าสู่ระบบ</h2><label>อีเมล<input type="email" value={email} onChange={e => setEmail(e.target.value)} required /></label><label>รหัสผ่าน<input type="password" value={password} onChange={e => setPassword(e.target.value)} required /></label><button className="upload" disabled={busy}>เข้าสู่ระบบ</button><button type="button" onClick={resetPassword} disabled={busy}>ลืมรหัสผ่าน</button></form> : <>
       <section className="recent"><h2>นำเข้าและวิเคราะห์ FIT</h2><p>เข้าสู่ระบบในชื่อ {user.email} แล้ว เลือกไฟล์จากนาฬิกาวิ่งของคุณเพื่อวิเคราะห์ Pace, Heart rate, Power, Cadence และข้อมูลประกอบการวิ่ง</p><form className="toolbar" onSubmit={uploadAndAnalyze}><label>ไฟล์ FIT<input type="file" accept=".fit" onChange={e => setFile(e.target.files?.[0] || null)} required disabled={busy} /></label><button className="upload" disabled={busy || !file}>{busy ? "กำลังทำงาน…" : "วิเคราะห์ไฟล์"}</button></form></section>
       {result && <section className="recent"><h2>ผลการวิเคราะห์</h2><p>สถานะ: {result.status === "analyzed" ? "สำเร็จ" : result.status} {result.cached ? "(ใช้ผลที่คำนวณไว้แล้ว)" : ""}</p><div className="analytics-grid">{Object.entries(result.summary || {}).slice(0, 12).map(([key, metric]: [string, any]) => <article className="metric-card" key={key}><span>{key.replaceAll("_", " ")}</span><strong>{value(metric?.value, metric?.unit ? ` ${metric.unit}` : "")}</strong></article>)}</div></section>}
     </>}
