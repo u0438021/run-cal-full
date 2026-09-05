@@ -88,6 +88,16 @@ def _bearer(authorization: str | None = Header(None)) -> dict:
 
 
 def _activity_refs(database, uid: str, activity_id: str):
+    workspace_id, athlete = _athlete_ref(database, uid)
+    return (
+        workspace_id,
+        athlete.collection("activities").document(activity_id),
+        athlete.collection("activities").document(activity_id).collection("fitFiles").document(activity_id),
+        athlete.collection("monthly"),
+    )
+
+
+def _athlete_ref(database, uid: str):
     user = database.collection("users").document(uid).get()
     if not user.exists or user.to_dict().get("status") != "active":
         raise HTTPException(403, "Account is unavailable")
@@ -99,12 +109,7 @@ def _activity_refs(database, uid: str, activity_id: str):
     if not member.exists or "athlete" not in (member.to_dict().get("roles") or []):
         raise HTTPException(403, "Athlete access is unavailable")
     athlete = workspace.collection("athletes").document(uid)
-    return (
-        workspace_id,
-        athlete.collection("activities").document(activity_id),
-        athlete.collection("activities").document(activity_id).collection("fitFiles").document(activity_id),
-        athlete.collection("monthly"),
-    )
+    return workspace_id, athlete
 
 
 def _build_analytics(parsed: dict, weight_kg: float | None) -> tuple[dict, list[dict]]:
@@ -155,6 +160,10 @@ def _build_analytics(parsed: dict, weight_kg: float | None) -> tuple[dict, list[
         "relationships": relationships(samples),
         "efficiency": efficiency(samples),
         "dataQuality": parsed.get("data_quality", {}),
+        "activityMeta": {
+            "startedAt": parsed.get("activity", {}).get("started_at"),
+            "distanceM": parsed.get("activity", {}).get("distance_m"),
+        },
     }
     series = [
         {
@@ -167,9 +176,86 @@ def _build_analytics(parsed: dict, weight_kg: float | None) -> tuple[dict, list[
     return _json_safe(payload), _json_safe(series)
 
 
+def _dashboard_bucket() -> dict[str, Any]:
+    return {"runs": 0, "durationSeconds": 0.0, "distanceM": 0.0, "distanceKnown": False, "weighted": {}}
+
+
+def _dashboard_result(bucket: dict[str, Any]) -> dict[str, Any]:
+    duration = bucket["durationSeconds"]
+    metrics = {}
+    for key, value in bucket["weighted"].items():
+        metrics[key] = value / duration if duration else None
+    return {
+        "runs": bucket["runs"],
+        "durationSeconds": duration,
+        "distanceM": bucket["distanceM"] if bucket["distanceKnown"] else None,
+        "metrics": metrics,
+    }
+
+
+def _add_dashboard_activity(bucket: dict[str, Any], analytics: dict[str, Any]) -> None:
+    activity = analytics.get("activity") or {}
+    duration = float(activity.get("observed_timer_seconds") or 0)
+    if duration <= 0:
+        return
+    bucket["runs"] += 1
+    bucket["durationSeconds"] += duration
+    distance = (analytics.get("activityMeta") or {}).get("distanceM")
+    if isinstance(distance, (int, float)) and distance >= 0:
+        bucket["distanceM"] += float(distance)
+        bucket["distanceKnown"] = True
+    for name in ("pace_s_km", "heart_rate_bpm", "power_w", "cadence_spm"):
+        value = (activity.get("metrics") or {}).get(name, {}).get("value")
+        if isinstance(value, (int, float)):
+            bucket["weighted"][name] = bucket["weighted"].get(name, 0.0) + float(value) * duration
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok", "parser_version": PARSER_VERSION}
+
+
+@app.get("/v1/dashboard/summary")
+def dashboard_summary(claims: Annotated[dict, Depends(_bearer)]) -> dict:
+    uid = claims.get("uid") or claims.get("sub")
+    if not isinstance(uid, str) or not uid:
+        raise HTTPException(401, "Invalid session")
+    database, _bucket = _firebase_clients()
+    _workspace, athlete = _athlete_ref(database, uid)
+    all_time = _dashboard_bucket()
+    months: dict[str, dict[str, Any]] = {}
+    weeks: dict[str, dict[str, Any]] = {}
+    for activity_doc in (
+        athlete.collection("activities")
+        .order_by("createdAt", direction=firestore.Query.DESCENDING)
+        .limit(100)
+        .stream()
+    ):
+        activity_data = activity_doc.to_dict()
+        if activity_data.get("importStatus") != "analyzed":
+            continue
+        current = activity_doc.reference.collection("analytics").document("current").get()
+        if not current.exists:
+            continue
+        analytics = current.to_dict()
+        started = (analytics.get("activityMeta") or {}).get("startedAt") or (analytics.get("activity") or {}).get("window_start")
+        try:
+            started_at = datetime.fromisoformat(started.replace("Z", "+00:00")) if isinstance(started, str) else None
+        except ValueError:
+            started_at = None
+        if started_at is None:
+            continue
+        month = started_at.strftime("%Y-%m")
+        iso_year, iso_week, _weekday = started_at.isocalendar()
+        week = f"{iso_year}-W{iso_week:02d}"
+        _add_dashboard_activity(all_time, analytics)
+        _add_dashboard_activity(months.setdefault(month, _dashboard_bucket()), analytics)
+        _add_dashboard_activity(weeks.setdefault(week, _dashboard_bucket()), analytics)
+    return {
+        "allTime": _dashboard_result(all_time),
+        "months": [{"period": period, **_dashboard_result(bucket)} for period, bucket in sorted(months.items(), reverse=True)[:12]],
+        "weeks": [{"period": period, **_dashboard_result(bucket)} for period, bucket in sorted(weeks.items(), reverse=True)[:8]],
+    }
 
 
 @app.post("/v1/activities/{activity_id}/analyze")

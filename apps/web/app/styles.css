@@ -26,6 +26,14 @@ button:disabled { cursor: wait; opacity: .6; }
 .chart-grid { fill: none; stroke: #e3e6df; stroke-width: 1; }
 .chart-line { fill: none; stroke: var(--ink); stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
 .activity-chart figcaption span { margin-left: auto; }
+.summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-top: 24px; }
+.summary-grid article { display: grid; gap: 8px; min-height: 130px; padding: 20px; border: 1px solid var(--line); border-radius: 18px; background: var(--paper); }
+.summary-grid span, .summary-grid small, .weekly-trend span { color: var(--muted); font-size: 12px; }
+.summary-grid strong { align-self: end; font-size: 25px; letter-spacing: -1px; }
+.weekly-trend { margin-top: 32px; padding-top: 24px; border-top: 1px solid var(--line); }
+.week-bars { display: flex; align-items: end; gap: 12px; height: 135px; margin-top: 18px; }
+.week-bars div { flex: 1; min-width: 26px; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: end; gap: 7px; }
+.week-bars i { width: 100%; min-height: 8px; background: var(--ink); border-radius: 7px 7px 2px 2px; }
 .run-list { display: grid; gap: 8px; margin: 20px 0; }
 .run-list button { display: flex; flex-wrap: wrap; gap: 20px; justify-content: space-between; padding: 18px; background: var(--paper); border: 1px solid var(--line); border-radius: 12px; text-align: left; }
 .run-list button[aria-pressed="true"] { background: var(--lime); }
