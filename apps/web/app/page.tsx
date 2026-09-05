@@ -17,6 +17,15 @@ const firebaseConfig = {
 type Metric = { value?: number; unit?: string };
 type Result = { activityId: string; status: string; cached: boolean; summary?: { metrics?: Record<string, Metric> } };
 type Activity = { id: string; originalName?: string; importStatus?: string; createdAt?: any };
+type SeriesPoint = { running?: boolean; speed_mps?: number; heart_rate_bpm?: number; power_w?: number; cadence_spm?: number };
+type ChartName = "pace" | "heartRate" | "power" | "cadence";
+
+const CHARTS: Record<ChartName, { label: string; unit: string; value: (point: SeriesPoint) => number | null }> = {
+  pace: { label: "Pace", unit: "s/km", value: point => point.speed_mps && point.speed_mps > 0 ? 1000 / point.speed_mps : null },
+  heartRate: { label: "Heart rate", unit: "bpm", value: point => typeof point.heart_rate_bpm === "number" ? point.heart_rate_bpm : null },
+  power: { label: "Power", unit: "W", value: point => typeof point.power_w === "number" ? point.power_w : null },
+  cadence: { label: "Cadence", unit: "spm", value: point => typeof point.cadence_spm === "number" ? point.cadence_spm : null },
+};
 
 function initializeFirebase() {
   if (!window.firebase.apps.length) window.firebase.initializeApp(firebaseConfig);
@@ -42,6 +51,25 @@ function activityDate(timestamp: any) {
   return date ? date.toLocaleDateString("th-TH", { dateStyle: "medium" }) : "กำลังบันทึกวันที่";
 }
 
+function chartPath(series: SeriesPoint[], chart: ChartName) {
+  const values = series.map(CHARTS[chart].value).filter((value): value is number => value !== null);
+  if (!values.length) return { path: "", min: 0, max: 0 };
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const span = max - min || 1;
+  let previousWasValue = false;
+  const path = series.map((point, index) => {
+    const raw = point.running === false ? null : CHARTS[chart].value(point);
+    if (raw === null) { previousWasValue = false; return ""; }
+    const x = (index / Math.max(series.length - 1, 1)) * 600;
+    const y = 190 - ((raw - min) / span) * 160;
+    const command = previousWasValue ? "L" : "M";
+    previousWasValue = true;
+    return `${command}${x.toFixed(1)} ${y.toFixed(1)}`;
+  }).join(" ");
+  return { path, min, max };
+}
+
 export default function Dashboard() {
   const [ready, setReady] = useState(false);
   const [user, setUser] = useState<any>(null);
@@ -54,6 +82,8 @@ export default function Dashboard() {
   const [result, setResult] = useState<Result | null>(null);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [activeActivityId, setActiveActivityId] = useState<string | null>(null);
+  const [series, setSeries] = useState<SeriesPoint[]>([]);
+  const [chart, setChart] = useState<ChartName>("pace");
 
   useEffect(() => {
     const wait = window.setInterval(() => {
@@ -84,6 +114,23 @@ export default function Dashboard() {
     })();
     return () => { cancelled = true; unsubscribe?.(); };
   }, [ready, user]);
+
+  useEffect(() => {
+    if (!user || !activeActivityId) { setSeries([]); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = await user.getIdToken();
+        const response = await fetch(`${API_ORIGIN}/v1/activities/${activeActivityId}/series`, { headers: { Authorization: `Bearer ${token}` } });
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.detail || "ไม่สามารถโหลดข้อมูลกราฟได้");
+        if (!cancelled) setSeries(Array.isArray(payload.series) ? payload.series : []);
+      } catch (caught) {
+        if (!cancelled) { setSeries([]); setError(caught instanceof Error ? caught.message : "ไม่สามารถโหลดข้อมูลกราฟได้"); }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [activeActivityId, user]);
 
   async function login(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setBusy(true); setError("");
@@ -155,6 +202,7 @@ export default function Dashboard() {
       <section className="recent"><h2>นำเข้าและวิเคราะห์ FIT</h2><p>เข้าสู่ระบบในชื่อ {user.email} แล้ว เลือกไฟล์จากนาฬิกาวิ่งของคุณเพื่อวิเคราะห์ Pace, Heart rate, Power, Cadence และข้อมูลประกอบการวิ่ง</p><form className="toolbar" onSubmit={uploadAndAnalyze}><label>ไฟล์ FIT<input type="file" accept=".fit" onChange={e => setFile(e.target.files?.[0] || null)} required disabled={busy} /></label><button className="upload" disabled={busy || !file}>{busy ? "กำลังทำงาน…" : "วิเคราะห์ไฟล์"}</button></form></section>
       <section className="recent"><h2>ประวัติการวิ่ง</h2><p>เลือกกิจกรรมเพื่อเปิดผลที่วิเคราะห์ไว้ โดยไม่ต้องอัปโหลดไฟล์ซ้ำ</p>{activities.length ? <div className="run-list">{activities.map(activity => <button type="button" key={activity.id} onClick={() => openActivity(activity.id)} aria-pressed={activeActivityId === activity.id} disabled={busy}><span>{activity.originalName || "ไฟล์ FIT"}</span><span>{activityDate(activity.createdAt)}</span><span>{activity.importStatus === "analyzed" ? "วิเคราะห์แล้ว" : "กำลังดำเนินการ"}</span></button>)}</div> : <p>ยังไม่มีประวัติการวิ่ง</p>}</section>
       {result && <section className="recent"><h2>ผลการวิเคราะห์</h2><p>สถานะ: {result.status === "analyzed" ? "สำเร็จ" : result.status} {result.cached ? "(ใช้ผลที่คำนวณไว้แล้ว)" : ""}</p><div className="analytics-grid">{Object.entries(result.summary?.metrics || {}).slice(0, 12).map(([key, metric]) => <article className="metric-card" key={key}><span>{key.replaceAll("_", " ")}</span><strong>{value(metric.value, metric.unit ? ` ${metric.unit}` : "")}</strong></article>)}</div></section>}
+      {result && <section className="recent"><div className="section-heading"><div><h2>กราฟระหว่างการวิ่ง</h2><p>แสดงเฉพาะช่วงที่นาฬิกาบันทึกข้อมูล</p></div><div className="segmented">{(Object.keys(CHARTS) as ChartName[]).map(name => <button type="button" key={name} className={chart === name ? "selected" : ""} onClick={() => setChart(name)} aria-pressed={chart === name}>{CHARTS[name].label}</button>)}</div></div>{series.length ? (() => { const data = chartPath(series, chart); return <figure className="activity-chart"><div className="chart-label"><strong>{CHARTS[chart].label}</strong><span>{value(data.min, ` ${CHARTS[chart].unit}`)} – {value(data.max, ` ${CHARTS[chart].unit}`)}</span></div><svg viewBox="0 0 600 220" role="img" aria-label={`กราฟ ${CHARTS[chart].label}`}><path className="chart-grid" d="M0 30H600 M0 110H600 M0 190H600" /><path className="chart-line" d={data.path} /></svg><figcaption>เริ่มการวิ่ง <span>จบการวิ่ง</span></figcaption></figure>; })() : <p>กำลังโหลดข้อมูลกราฟ…</p>}</section>}
     </>}
   </main>;
 }

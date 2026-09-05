@@ -19,6 +19,13 @@ button:disabled { cursor: wait; opacity: .6; }
 .toolbar { display: flex; gap: 20px; flex-wrap: wrap; align-items: center; }
 .analytics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-top: 24px; }
 .analytics-grid strong { font-size: 38px; }
+.activity-chart { margin: 28px 0 0; }
+.chart-label, .activity-chart figcaption { display: flex; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 13px; }
+.chart-label strong { color: var(--ink); font-size: 18px; }
+.activity-chart svg { display: block; width: 100%; height: auto; margin-top: 16px; overflow: visible; }
+.chart-grid { fill: none; stroke: #e3e6df; stroke-width: 1; }
+.chart-line { fill: none; stroke: var(--ink); stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
+.activity-chart figcaption span { margin-left: auto; }
 .run-list { display: grid; gap: 8px; margin: 20px 0; }
 .run-list button { display: flex; flex-wrap: wrap; gap: 20px; justify-content: space-between; padding: 18px; background: var(--paper); border: 1px solid var(--line); border-radius: 12px; text-align: left; }
 .run-list button[aria-pressed="true"] { background: var(--lime); }
