@@ -16,6 +16,7 @@ const firebaseConfig = {
 
 type Metric = { value?: number; unit?: string };
 type Result = { activityId: string; status: string; cached: boolean; summary?: { metrics?: Record<string, Metric> } };
+type Activity = { id: string; originalName?: string; importStatus?: string; createdAt?: any };
 
 function initializeFirebase() {
   if (!window.firebase.apps.length) window.firebase.initializeApp(firebaseConfig);
@@ -25,6 +26,20 @@ function initializeFirebase() {
 function value(raw: unknown, suffix = "") {
   if (typeof raw !== "number") return "—";
   return `${raw.toLocaleString("th-TH", { maximumFractionDigits: 1 })}${suffix}`;
+}
+
+function analysisResult(activityId: string, payload: any): Result {
+  return {
+    activityId,
+    status: payload.status || "analyzed",
+    cached: Boolean(payload.cached),
+    summary: payload.summary || payload.activity,
+  };
+}
+
+function activityDate(timestamp: any) {
+  const date = timestamp?.toDate?.();
+  return date ? date.toLocaleDateString("th-TH", { dateStyle: "medium" }) : "กำลังบันทึกวันที่";
 }
 
 export default function Dashboard() {
@@ -37,6 +52,8 @@ export default function Dashboard() {
   const [message, setMessage] = useState("กำลังเตรียมระบบ…");
   const [error, setError] = useState("");
   const [result, setResult] = useState<Result | null>(null);
+  const [activities, setActivities] = useState<Activity[]>([]);
+  const [activeActivityId, setActiveActivityId] = useState<string | null>(null);
 
   useEffect(() => {
     const wait = window.setInterval(() => {
@@ -47,6 +64,26 @@ export default function Dashboard() {
     }, 100);
     return () => window.clearInterval(wait);
   }, []);
+
+  useEffect(() => {
+    if (!ready || !user) { setActivities([]); return; }
+    let unsubscribe: (() => void) | undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { db } = initializeFirebase();
+        const account = await db.collection("users").doc(user.uid).get();
+        const workspaceId = account.data()?.workspaceId;
+        if (!workspaceId || cancelled) return;
+        unsubscribe = db.collection("workspaces").doc(workspaceId).collection("athletes").doc(user.uid)
+          .collection("activities").orderBy("createdAt", "desc").limit(20)
+          .onSnapshot((snapshot: any) => setActivities(snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }))));
+      } catch {
+        if (!cancelled) setError("ไม่สามารถโหลดประวัติการวิ่งได้");
+      }
+    })();
+    return () => { cancelled = true; unsubscribe?.(); };
+  }, [ready, user]);
 
   async function login(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setBusy(true); setError("");
@@ -91,9 +128,23 @@ export default function Dashboard() {
       const response = await fetch(`${API_ORIGIN}/v1/activities/${activityId}/analyze`, { method: "POST", headers: { Authorization: `Bearer ${token}` } });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.detail || "ไม่สามารถวิเคราะห์ไฟล์นี้ได้");
-      setResult(payload); setMessage("วิเคราะห์เสร็จแล้ว");
+      setResult(analysisResult(activityId, payload)); setActiveActivityId(activityId); setMessage("วิเคราะห์เสร็จแล้ว");
     } catch (caught) { setError(caught instanceof Error ? caught.message : "เกิดข้อผิดพลาด"); setMessage(""); }
     finally { setBusy(false); }
+  }
+
+  async function openActivity(activityId: string) {
+    if (!user) return;
+    setBusy(true); setError(""); setMessage("กำลังโหลดผลการวิเคราะห์…");
+    try {
+      const token = await user.getIdToken();
+      const response = await fetch(`${API_ORIGIN}/v1/activities/${activityId}/analytics`, { headers: { Authorization: `Bearer ${token}` } });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.detail || "ไม่สามารถเปิดผลการวิเคราะห์ได้");
+      setResult(analysisResult(activityId, payload)); setActiveActivityId(activityId); setMessage("");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "ไม่สามารถเปิดผลการวิเคราะห์ได้"); setMessage("");
+    } finally { setBusy(false); }
   }
 
   return <main className="live-dashboard">
@@ -102,6 +153,7 @@ export default function Dashboard() {
     {message && <p role="status">{message}</p>}
     {!ready ? null : !user ? <form className="login-form recent" onSubmit={login}><h2>เข้าสู่ระบบ</h2><label>อีเมล<input type="email" value={email} onChange={e => setEmail(e.target.value)} required /></label><label>รหัสผ่าน<input type="password" value={password} onChange={e => setPassword(e.target.value)} required /></label><button className="upload" disabled={busy}>เข้าสู่ระบบ</button><button type="button" onClick={resetPassword} disabled={busy}>ลืมรหัสผ่าน</button></form> : <>
       <section className="recent"><h2>นำเข้าและวิเคราะห์ FIT</h2><p>เข้าสู่ระบบในชื่อ {user.email} แล้ว เลือกไฟล์จากนาฬิกาวิ่งของคุณเพื่อวิเคราะห์ Pace, Heart rate, Power, Cadence และข้อมูลประกอบการวิ่ง</p><form className="toolbar" onSubmit={uploadAndAnalyze}><label>ไฟล์ FIT<input type="file" accept=".fit" onChange={e => setFile(e.target.files?.[0] || null)} required disabled={busy} /></label><button className="upload" disabled={busy || !file}>{busy ? "กำลังทำงาน…" : "วิเคราะห์ไฟล์"}</button></form></section>
+      <section className="recent"><h2>ประวัติการวิ่ง</h2><p>เลือกกิจกรรมเพื่อเปิดผลที่วิเคราะห์ไว้ โดยไม่ต้องอัปโหลดไฟล์ซ้ำ</p>{activities.length ? <div className="run-list">{activities.map(activity => <button type="button" key={activity.id} onClick={() => openActivity(activity.id)} aria-pressed={activeActivityId === activity.id} disabled={busy}><span>{activity.originalName || "ไฟล์ FIT"}</span><span>{activityDate(activity.createdAt)}</span><span>{activity.importStatus === "analyzed" ? "วิเคราะห์แล้ว" : "กำลังดำเนินการ"}</span></button>)}</div> : <p>ยังไม่มีประวัติการวิ่ง</p>}</section>
       {result && <section className="recent"><h2>ผลการวิเคราะห์</h2><p>สถานะ: {result.status === "analyzed" ? "สำเร็จ" : result.status} {result.cached ? "(ใช้ผลที่คำนวณไว้แล้ว)" : ""}</p><div className="analytics-grid">{Object.entries(result.summary?.metrics || {}).slice(0, 12).map(([key, metric]) => <article className="metric-card" key={key}><span>{key.replaceAll("_", " ")}</span><strong>{value(metric.value, metric.unit ? ` ${metric.unit}` : "")}</strong></article>)}</div></section>}
     </>}
   </main>;
