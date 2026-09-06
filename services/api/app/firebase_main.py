@@ -210,6 +210,34 @@ def _add_dashboard_activity(bucket: dict[str, Any], analytics: dict[str, Any]) -
             bucket["weighted"][name] = bucket["weighted"].get(name, 0.0) + float(value) * duration
 
 
+def _distance_from_series(bucket, object_key: str) -> float | None:
+    """Recover distance for analytics created before activityMeta was introduced."""
+    blob = bucket.blob(object_key)
+    if not blob.exists():
+        return None
+    try:
+        compressed = blob.download_as_bytes()
+        with gzip.GzipFile(fileobj=BytesIO(compressed)) as stream:
+            raw_json = stream.read(MAX_SERIES_JSON_BYTES + 1)
+        if len(raw_json) > MAX_SERIES_JSON_BYTES:
+            return None
+        series = json.loads(raw_json)
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(series, list):
+        return None
+    distances = [
+        float(row["distance_m"])
+        for row in series
+        if isinstance(row, dict)
+        and isinstance(row.get("distance_m"), (int, float))
+        and float(row["distance_m"]) >= 0
+    ]
+    if len(distances) < 2:
+        return None
+    return max(distances) - min(distances)
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok", "parser_version": PARSER_VERSION}
@@ -220,8 +248,8 @@ def dashboard_summary(claims: Annotated[dict, Depends(_bearer)]) -> dict:
     uid = claims.get("uid") or claims.get("sub")
     if not isinstance(uid, str) or not uid:
         raise HTTPException(401, "Invalid session")
-    database, _bucket = _firebase_clients()
-    _workspace, athlete = _athlete_ref(database, uid)
+    database, bucket = _firebase_clients()
+    workspace, athlete = _athlete_ref(database, uid)
     all_time = _dashboard_bucket()
     months: dict[str, dict[str, Any]] = {}
     weeks: dict[str, dict[str, Any]] = {}
@@ -238,6 +266,17 @@ def dashboard_summary(claims: Annotated[dict, Depends(_bearer)]) -> dict:
         if not current.exists:
             continue
         analytics = current.to_dict()
+        meta = analytics.get("activityMeta") or {}
+        distance = meta.get("distanceM")
+        if not isinstance(distance, (int, float)):
+            key = analytics.get("seriesObjectKey")
+            expected_prefix = f"analytics/{workspace}/{uid}/{activity_doc.id}/"
+            if isinstance(key, str) and key.startswith(expected_prefix):
+                recovered = _distance_from_series(bucket, key)
+                if recovered is not None:
+                    meta = {**meta, "distanceM": recovered}
+                    analytics["activityMeta"] = meta
+                    current.reference.set({"activityMeta": meta}, merge=True)
         started = (analytics.get("activityMeta") or {}).get("startedAt") or (analytics.get("activity") or {}).get("window_start")
         try:
             started_at = datetime.fromisoformat(started.replace("Z", "+00:00")) if isinstance(started, str) else None
