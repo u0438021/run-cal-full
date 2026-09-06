@@ -307,7 +307,7 @@ def get_profile(claims: Annotated[dict, Depends(_bearer)]) -> dict:
     data = athlete.get().to_dict() or {}
     return {
         key: data.get(key)
-        for key in ("weightKg", "targetPaceSecondsPerKm", "maxHeartRate", "weeklyDistanceGoalKm")
+        for key in ("weightKg", "targetPaceSecondsPerKm", "maxHeartRate", "weeklyDistanceGoalKm", "weeklyReminderEnabled")
     }
 
 
@@ -316,7 +316,7 @@ def save_profile(profile: dict[str, Any], claims: Annotated[dict, Depends(_beare
     uid = claims.get("uid") or claims.get("sub")
     if not isinstance(uid, str) or not uid:
         raise HTTPException(401, "Invalid session")
-    normalized: dict[str, float | None] = {}
+    normalized: dict[str, Any] = {}
     limits = {
         "weightKg": (25, 300),
         "targetPaceSecondsPerKm": (120, 1800),
@@ -327,10 +327,17 @@ def save_profile(profile: dict[str, Any], claims: Annotated[dict, Depends(_beare
         value = profile.get(key)
         if value in (None, ""):
             normalized[key] = None
-        elif isinstance(value, (int, float)) and minimum <= float(value) <= maximum:
+        elif isinstance(value, (int, float)) and not isinstance(value, bool) and minimum <= float(value) <= maximum:
             normalized[key] = float(value)
         else:
             raise HTTPException(400, f"{key} is invalid")
+    reminder_enabled = profile.get("weeklyReminderEnabled")
+    if reminder_enabled is None:
+        normalized["weeklyReminderEnabled"] = False
+    elif isinstance(reminder_enabled, bool):
+        normalized["weeklyReminderEnabled"] = reminder_enabled
+    else:
+        raise HTTPException(400, "weeklyReminderEnabled is invalid")
     database, _bucket = _firebase_clients()
     _workspace, athlete = _athlete_ref(database, uid)
     athlete.set({**normalized, "profileUpdatedAt": firestore.SERVER_TIMESTAMP}, merge=True)

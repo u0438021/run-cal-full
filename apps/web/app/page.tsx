@@ -21,7 +21,7 @@ type SeriesPoint = { time?: string; running?: boolean; speed_mps?: number; heart
 type ChartName = "pace" | "heartRate" | "power" | "cadence";
 type TrainingTotal = { runs: number; durationSeconds: number; distanceM?: number | null; metrics: Record<string, number | null> };
 type TrainingDashboard = { allTime: TrainingTotal; months: Array<TrainingTotal & { period: string }>; weeks: Array<TrainingTotal & { period: string }> };
-type RunnerProfile = { weightKg?: number | null; targetPaceSecondsPerKm?: number | null; maxHeartRate?: number | null; weeklyDistanceGoalKm?: number | null };
+type RunnerProfile = { weightKg?: number | null; targetPaceSecondsPerKm?: number | null; maxHeartRate?: number | null; weeklyDistanceGoalKm?: number | null; weeklyReminderEnabled?: boolean };
 
 const CHARTS: Record<ChartName, { label: string; unit: string; value: (point: SeriesPoint) => number | null }> = {
   pace: { label: "Pace", unit: "s/km", value: point => point.speed_mps && point.speed_mps > 0 ? 1000 / point.speed_mps : null },
@@ -163,6 +163,8 @@ export default function Dashboard() {
   const [maxHeartRateInput, setMaxHeartRateInput] = useState("");
   const [weeklyGoalInput, setWeeklyGoalInput] = useState("30");
   const [profileMessage, setProfileMessage] = useState("");
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | "unsupported">("default");
+  const [reminderMessage, setReminderMessage] = useState("");
 
   useEffect(() => {
     const wait = window.setInterval(() => {
@@ -227,6 +229,24 @@ export default function Dashboard() {
     })();
     return () => { cancelled = true; };
   }, [user]);
+
+  useEffect(() => {
+    if (typeof Notification === "undefined") { setNotificationPermission("unsupported"); return; }
+    setNotificationPermission(Notification.permission);
+  }, []);
+
+  useEffect(() => {
+    if (!dashboard || !profile.weeklyReminderEnabled || notificationPermission !== "granted") return;
+    const week = dashboard.weeks[0];
+    const goalKm = profile.weeklyDistanceGoalKm || 30;
+    const completedKm = (week?.distanceM || 0) / 1000;
+    if (!week || completedKm >= goalKm) return;
+    const reminderKey = `run-cal-weekly-reminder-${week.period}`;
+    if (window.localStorage.getItem(reminderKey)) return;
+    const message = `สัปดาห์นี้วิ่งแล้ว ${completedKm.toLocaleString("th-TH", { maximumFractionDigits: 1 })} กม. เหลืออีก ${(goalKm - completedKm).toLocaleString("th-TH", { maximumFractionDigits: 1 })} กม. เพื่อถึงเป้าหมาย`;
+    window.localStorage.setItem(reminderKey, "shown");
+    navigator.serviceWorker?.ready.then(registration => registration.showNotification("RUN | CAL", { body: message, icon: "/icon.svg", tag: reminderKey })).catch(() => new Notification("RUN | CAL", { body: message, icon: "/icon.svg" }));
+  }, [dashboard, profile, notificationPermission]);
 
   useEffect(() => {
     if (!user) { setProfile({}); return; }
@@ -334,7 +354,7 @@ export default function Dashboard() {
     try {
       const weeklyDistanceGoalKm = weeklyGoalInput ? Number(weeklyGoalInput) : null;
       if (!weeklyDistanceGoalKm || weeklyDistanceGoalKm < 1 || weeklyDistanceGoalKm > 500) { setError("กรุณากรอกเป้าหมายรายสัปดาห์ระหว่าง 1–500 กม."); return; }
-      const payload = { weightKg: weightInput ? Number(weightInput) : null, targetPaceSecondsPerKm, maxHeartRate: maxHeartRateInput ? Number(maxHeartRateInput) : null, weeklyDistanceGoalKm };
+      const payload = { weightKg: weightInput ? Number(weightInput) : null, targetPaceSecondsPerKm, maxHeartRate: maxHeartRateInput ? Number(maxHeartRateInput) : null, weeklyDistanceGoalKm, weeklyReminderEnabled: profile.weeklyReminderEnabled === true };
       const token = await user.getIdToken();
       const response = await fetch(`${API_ORIGIN}/v1/profile`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       const saved = await response.json();
@@ -345,6 +365,29 @@ export default function Dashboard() {
     } finally { setBusy(false); }
   }
 
+  async function setWeeklyReminder(enabled: boolean) {
+    if (!user) return;
+    setError(""); setReminderMessage("");
+    if (enabled) {
+      if (typeof Notification === "undefined") { setNotificationPermission("unsupported"); setReminderMessage("อุปกรณ์นี้ยังไม่รองรับการแจ้งเตือน"); return; }
+      const permission = await Notification.requestPermission();
+      setNotificationPermission(permission);
+      if (permission !== "granted") { setReminderMessage("ยังไม่ได้รับอนุญาตให้แจ้งเตือน คุณสามารถเปิดได้จากการตั้งค่าเบราว์เซอร์"); return; }
+    }
+    setBusy(true);
+    try {
+      const targetPaceSecondsPerKm = targetPaceInput ? parsePaceInput(targetPaceInput) : null;
+      const payload = { weightKg: weightInput ? Number(weightInput) : null, targetPaceSecondsPerKm, maxHeartRate: maxHeartRateInput ? Number(maxHeartRateInput) : null, weeklyDistanceGoalKm: weeklyGoalInput ? Number(weeklyGoalInput) : 30, weeklyReminderEnabled: enabled };
+      const token = await user.getIdToken();
+      const response = await fetch(`${API_ORIGIN}/v1/profile`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      const saved = await response.json();
+      if (!response.ok) throw new Error(saved.detail || "ไม่สามารถบันทึกการแจ้งเตือนได้");
+      setProfile(saved); setReminderMessage(enabled ? "เปิดการแจ้งเตือนความคืบหน้ารายสัปดาห์แล้ว" : "ปิดการแจ้งเตือนรายสัปดาห์แล้ว");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "ไม่สามารถบันทึกการแจ้งเตือนได้");
+    } finally { setBusy(false); }
+  }
+
   return <main className="live-dashboard">
     <header className="topbar"><div><p className="kicker">RUN | CAL</p><h1>Running analytics</h1></div>{user && <button onClick={() => initializeFirebase().auth.signOut()}>ออกจากระบบ</button>}</header>
     {error && <p className="error" role="alert">{error}</p>}
@@ -352,6 +395,7 @@ export default function Dashboard() {
     {!ready ? null : !user ? <form className="login-form recent" onSubmit={login}><h2>เข้าสู่ระบบ</h2><label>อีเมล<input type="email" value={email} onChange={e => setEmail(e.target.value)} required /></label><label>รหัสผ่าน<input type="password" value={password} onChange={e => setPassword(e.target.value)} required /></label><button className="upload" disabled={busy}>เข้าสู่ระบบ</button><button type="button" onClick={resetPassword} disabled={busy}>ลืมรหัสผ่าน</button></form> : <>
       <section className="recent"><h2>นำเข้าและวิเคราะห์ FIT</h2><p>เข้าสู่ระบบในชื่อ {user.email} แล้ว เลือกไฟล์จากนาฬิกาวิ่งของคุณเพื่อวิเคราะห์ Pace, Heart rate, Power, Cadence และข้อมูลประกอบการวิ่ง</p><form className="toolbar" onSubmit={uploadAndAnalyze}><label>ไฟล์ FIT<input type="file" accept=".fit" onChange={e => setFile(e.target.files?.[0] || null)} required disabled={busy} /></label><button className="upload" disabled={busy || !file}>{busy ? "กำลังทำงาน…" : "วิเคราะห์ไฟล์"}</button></form></section>
       {dashboard && (() => { const month = dashboard.months[0] || dashboard.allTime; const maxWeek = Math.max(...dashboard.weeks.map(week => week.durationSeconds), 1); const currentWeek = dashboard.weeks[0]; const goalKm = profile.weeklyDistanceGoalKm || 30; const completedKm = (currentWeek?.distanceM || 0) / 1000; const progress = Math.min(100, (completedKm / goalKm) * 100); return <section className="recent"><div className="section-heading"><div><h2>ภาพรวมการฝึก</h2><p>{dashboard.months[0] ? periodLabel(dashboard.months[0].period) : "กิจกรรมที่วิเคราะห์ทั้งหมด"}</p></div></div><div className="summary-grid"><article><span>จำนวนครั้ง</span><strong>{month.runs}</strong><small>กิจกรรม</small></article><article><span>เวลาวิ่งรวม</span><strong>{durationLabel(month.durationSeconds)}</strong></article><article><span>ระยะทางรวม</span><strong>{typeof month.distanceM === "number" ? `${(month.distanceM / 1000).toLocaleString("th-TH", { maximumFractionDigits: 1 })} กม.` : "—"}</strong></article><article><span>Pace เฉลี่ย</span><strong>{paceLabel(month.metrics.pace_s_km)}</strong></article><article><span>Heart rate เฉลี่ย</span><strong>{value(month.metrics.heart_rate_bpm, " bpm")}</strong></article><article><span>Power เฉลี่ย</span><strong>{value(month.metrics.power_w, " W")}</strong></article></div><div className="weekly-goal"><div className="section-heading"><div><h3>เป้าหมายสัปดาห์นี้</h3><p>{completedKm.toLocaleString("th-TH", { maximumFractionDigits: 1 })} จาก {goalKm.toLocaleString("th-TH", { maximumFractionDigits: 0 })} กม.</p></div><strong>{Math.round(progress)}%</strong></div><div className="goal-progress" aria-label={`ทำได้ ${Math.round(progress)}% ของเป้าหมาย`}><i style={{ width: `${progress}%` }} /></div><p className="goal-status">{completedKm >= goalKm ? "✓ ทำเป้าหมายระยะทางของสัปดาห์นี้แล้ว" : `เหลืออีก ${(goalKm - completedKm).toLocaleString("th-TH", { maximumFractionDigits: 1 })} กม. เพื่อถึงเป้าหมาย`}</p></div>{dashboard.weeks.length > 0 && <div className="weekly-trend"><div className="section-heading"><strong>แนวโน้มเวลาวิ่งรายสัปดาห์</strong><span>8 สัปดาห์ล่าสุด</span></div><div className="week-bars">{[...dashboard.weeks].reverse().map(week => <div key={week.period} title={`${week.period}: ${durationLabel(week.durationSeconds)}`}><i style={{ height: `${Math.max(8, (week.durationSeconds / maxWeek) * 100)}%` }} /><span>{week.period.slice(-2)}</span></div>)}</div></div>}</section>; })()}
+      <section className="recent reminder-card"><h2>แจ้งเตือนความคืบหน้า</h2><p>เมื่อเปิด RUN | CAL ระบบจะแจ้งสถานะเป้าหมายของสัปดาห์นี้บนอุปกรณ์ของคุณ ข้อมูลการวิ่งไม่ถูกส่งออกไปภายนอก</p>{notificationPermission === "unsupported" ? <p>อุปกรณ์หรือเบราว์เซอร์นี้ไม่รองรับการแจ้งเตือน</p> : <button type="button" className="upload" onClick={() => setWeeklyReminder(!profile.weeklyReminderEnabled)} disabled={busy}>{profile.weeklyReminderEnabled ? "ปิดการแจ้งเตือน" : "เปิดการแจ้งเตือน"}</button>}{reminderMessage && <p role="status">{reminderMessage}</p>}</section>
       <section className="recent"><h2>โปรไฟล์นักวิ่ง</h2><p>ข้อมูลนี้ใช้ปรับคำแนะนำในอุปกรณ์ของคุณ และไม่ส่งต่อไปยังบริการ AI ภายนอก</p><form className="profile-form" onSubmit={saveProfile}><label>น้ำหนัก (กก.)<input inputMode="decimal" value={weightInput} onChange={event => setWeightInput(event.target.value)} placeholder="เช่น 65" /></label><label>Pace เป้าหมาย (นาที:วินาที/กม.)<input value={targetPaceInput} onChange={event => setTargetPaceInput(event.target.value)} placeholder="เช่น 6:00" /></label><label>Heart rate สูงสุด (bpm)<input inputMode="numeric" value={maxHeartRateInput} onChange={event => setMaxHeartRateInput(event.target.value)} placeholder="เช่น 185" /></label><label>เป้าหมายระยะวิ่ง/สัปดาห์ (กม.)<input inputMode="decimal" value={weeklyGoalInput} onChange={event => setWeeklyGoalInput(event.target.value)} placeholder="เช่น 30" /></label><button className="upload" disabled={busy}>บันทึกโปรไฟล์</button></form>{profileMessage && <p role="status">{profileMessage}</p>}</section>
       <section className="recent"><h2>ประวัติการวิ่ง</h2><p>เลือกกิจกรรมเพื่อเปิดผลที่วิเคราะห์ไว้ โดยไม่ต้องอัปโหลดไฟล์ซ้ำ</p>{activities.length ? <div className="run-list">{activities.map(activity => <div className="history-row" key={activity.id}><button type="button" onClick={() => openActivity(activity.id)} aria-pressed={activeActivityId === activity.id} disabled={busy}><span>{activity.originalName || "ไฟล์ FIT"}</span><span>{activityDate(activity.createdAt)}</span><span>{activity.importStatus === "analyzed" ? "วิเคราะห์แล้ว" : "กำลังดำเนินการ"}</span></button><button type="button" className="remove-activity" onClick={() => removeActivity(activity)} disabled={busy}>ลบ</button></div>)}</div> : <p>ยังไม่มีประวัติการวิ่ง</p>}</section>
       {result && <section className="recent"><h2>ผลการวิเคราะห์</h2><p>สถานะ: {result.status === "analyzed" ? "สำเร็จ" : result.status} {result.cached ? "(ใช้ผลที่คำนวณไว้แล้ว)" : ""}</p><div className="analytics-grid">{Object.entries(result.summary?.metrics || {}).slice(0, 12).map(([key, metric]) => <article className="metric-card" key={key}><span>{key.replaceAll("_", " ")}</span><strong>{value(metric.value, metric.unit ? ` ${metric.unit}` : "")}</strong></article>)}</div></section>}
