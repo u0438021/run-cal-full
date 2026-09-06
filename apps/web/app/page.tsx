@@ -35,6 +35,17 @@ function initializeFirebase() {
   return { auth: window.firebase.auth(), db: window.firebase.firestore(), storage: window.firebase.storage() };
 }
 
+async function authenticatedFetch(user: any, path: string, init: RequestInit = {}) {
+  const request = async (forceRefresh = false) => {
+    const token = await user.getIdToken(forceRefresh);
+    const headers = new Headers(init.headers);
+    headers.set("Authorization", `Bearer ${token}`);
+    return fetch(`${API_ORIGIN}${path}`, { ...init, headers });
+  };
+  const response = await request();
+  return response.status === 401 ? request(true) : response;
+}
+
 function value(raw: unknown, suffix = "") {
   if (typeof raw !== "number") return "—";
   return `${raw.toLocaleString("th-TH", { maximumFractionDigits: 1 })}${suffix}`;
@@ -201,8 +212,7 @@ export default function Dashboard() {
     let cancelled = false;
     (async () => {
       try {
-        const token = await user.getIdToken();
-        const response = await fetch(`${API_ORIGIN}/v1/activities/${activeActivityId}/series`, { headers: { Authorization: `Bearer ${token}` } });
+        const response = await authenticatedFetch(user, `/v1/activities/${activeActivityId}/series`);
         const payload = await response.json();
         if (!response.ok) throw new Error(payload.detail || "ไม่สามารถโหลดข้อมูลกราฟได้");
         if (!cancelled) setSeries(Array.isArray(payload.series) ? payload.series : []);
@@ -218,8 +228,7 @@ export default function Dashboard() {
     let cancelled = false;
     (async () => {
       try {
-        const token = await user.getIdToken();
-        const response = await fetch(`${API_ORIGIN}/v1/dashboard/summary`, { headers: { Authorization: `Bearer ${token}` } });
+        const response = await authenticatedFetch(user, "/v1/dashboard/summary");
         const payload = await response.json();
         if (!response.ok) throw new Error(payload.detail || "ไม่สามารถโหลดภาพรวมการฝึกได้");
         if (!cancelled) setDashboard(payload);
@@ -253,8 +262,7 @@ export default function Dashboard() {
     let cancelled = false;
     (async () => {
       try {
-        const token = await user.getIdToken();
-        const response = await fetch(`${API_ORIGIN}/v1/profile`, { headers: { Authorization: `Bearer ${token}` } });
+        const response = await authenticatedFetch(user, "/v1/profile");
         const payload = await response.json();
         if (!response.ok) throw new Error(payload.detail || "ไม่สามารถโหลดโปรไฟล์นักวิ่งได้");
         if (!cancelled) { setProfile(payload); setWeightInput(payload.weightKg?.toString() || ""); setTargetPaceInput(paceInput(payload.targetPaceSecondsPerKm)); setMaxHeartRateInput(payload.maxHeartRate?.toString() || ""); setWeeklyGoalInput(payload.weeklyDistanceGoalKm?.toString() || "30"); }
@@ -307,8 +315,7 @@ export default function Dashboard() {
       await activity.set({ createdAt: window.firebase.firestore.FieldValue.serverTimestamp(), originalName: file.name, sourceSha256: sha256, importStatus: "uploaded" });
       await activity.collection("fitFiles").doc(activityId).set({ objectKey, originalName: file.name, sha256, uploadedAt: window.firebase.firestore.FieldValue.serverTimestamp() });
       setMessage("กำลังวิเคราะห์ข้อมูลการวิ่ง…");
-      const token = await user.getIdToken();
-      const response = await fetch(`${API_ORIGIN}/v1/activities/${activityId}/analyze`, { method: "POST", headers: { Authorization: `Bearer ${token}` } });
+      const response = await authenticatedFetch(user, `/v1/activities/${activityId}/analyze`, { method: "POST" });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.detail || "ไม่สามารถวิเคราะห์ไฟล์นี้ได้");
       setResult(analysisResult(activityId, payload)); setActiveActivityId(activityId); setMessage("วิเคราะห์เสร็จแล้ว");
@@ -320,8 +327,7 @@ export default function Dashboard() {
     if (!user) return;
     setBusy(true); setError(""); setMessage("กำลังโหลดผลการวิเคราะห์…");
     try {
-      const token = await user.getIdToken();
-      const response = await fetch(`${API_ORIGIN}/v1/activities/${activityId}/analytics`, { headers: { Authorization: `Bearer ${token}` } });
+      const response = await authenticatedFetch(user, `/v1/activities/${activityId}/analytics`);
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.detail || "ไม่สามารถเปิดผลการวิเคราะห์ได้");
       setResult(analysisResult(activityId, payload)); setActiveActivityId(activityId); setMessage("");
@@ -334,8 +340,7 @@ export default function Dashboard() {
     if (!user || !window.confirm(`ลบ ${activity.originalName || "กิจกรรมนี้"} ออกจากประวัติใช่หรือไม่?`)) return;
     setBusy(true); setError("");
     try {
-      const token = await user.getIdToken();
-      const response = await fetch(`${API_ORIGIN}/v1/activities/${activity.id}/delete`, { method: "POST", headers: { Authorization: `Bearer ${token}` } });
+      const response = await authenticatedFetch(user, `/v1/activities/${activity.id}/delete`, { method: "POST" });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.detail || "ไม่สามารถลบกิจกรรมได้");
       if (activeActivityId === activity.id) { setActiveActivityId(null); setResult(null); }
@@ -355,8 +360,7 @@ export default function Dashboard() {
       const weeklyDistanceGoalKm = weeklyGoalInput ? Number(weeklyGoalInput) : null;
       if (!weeklyDistanceGoalKm || weeklyDistanceGoalKm < 1 || weeklyDistanceGoalKm > 500) { setError("กรุณากรอกเป้าหมายรายสัปดาห์ระหว่าง 1–500 กม."); return; }
       const payload = { weightKg: weightInput ? Number(weightInput) : null, targetPaceSecondsPerKm, maxHeartRate: maxHeartRateInput ? Number(maxHeartRateInput) : null, weeklyDistanceGoalKm, weeklyReminderEnabled: profile.weeklyReminderEnabled === true };
-      const token = await user.getIdToken();
-      const response = await fetch(`${API_ORIGIN}/v1/profile`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      const response = await authenticatedFetch(user, "/v1/profile", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       const saved = await response.json();
       if (!response.ok) throw new Error(saved.detail || "ไม่สามารถบันทึกโปรไฟล์ได้");
       setProfile(saved); setProfileMessage("บันทึกโปรไฟล์นักวิ่งแล้ว");
@@ -378,8 +382,7 @@ export default function Dashboard() {
     try {
       const targetPaceSecondsPerKm = targetPaceInput ? parsePaceInput(targetPaceInput) : null;
       const payload = { weightKg: weightInput ? Number(weightInput) : null, targetPaceSecondsPerKm, maxHeartRate: maxHeartRateInput ? Number(maxHeartRateInput) : null, weeklyDistanceGoalKm: weeklyGoalInput ? Number(weeklyGoalInput) : 30, weeklyReminderEnabled: enabled };
-      const token = await user.getIdToken();
-      const response = await fetch(`${API_ORIGIN}/v1/profile`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      const response = await authenticatedFetch(user, "/v1/profile", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       const saved = await response.json();
       if (!response.ok) throw new Error(saved.detail || "ไม่สามารถบันทึกการแจ้งเตือนได้");
       setProfile(saved); setReminderMessage(enabled ? "เปิดการแจ้งเตือนความคืบหน้ารายสัปดาห์แล้ว" : "ปิดการแจ้งเตือนรายสัปดาห์แล้ว");
