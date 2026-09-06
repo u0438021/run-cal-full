@@ -1,0 +1,14 @@
+{
+  "name": "RUN | CAL Running Analytics",
+  "short_name": "RUN | CAL",
+  "description": "วิเคราะห์ข้อมูลการวิ่งจากไฟล์ FIT",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f7f5ee",
+  "theme_color": "#f45125",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/maskable-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}

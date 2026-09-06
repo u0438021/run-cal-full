@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="RUN CAL">
+  <rect width="512" height="512" fill="#f45125"/>
+  <circle cx="256" cy="256" r="205" fill="#ff693b"/>
+  <path fill="#fff" d="M310 104 204 248h72l-74 160 118-166h-74z"/>
+  <path fill="#fff" d="M154 360c34 30 75 45 122 45 26 0 50-5 72-16l-16-27c-17 8-36 12-56 12-37 0-70-12-100-37z" opacity=".9"/>
+</svg>
