@@ -31,6 +31,12 @@ button:disabled { cursor: wait; opacity: .6; }
 .summary-grid span, .summary-grid small, .weekly-trend span { color: var(--muted); font-size: 12px; }
 .summary-grid strong { align-self: end; font-size: 25px; letter-spacing: -1px; }
 .weekly-trend { margin-top: 32px; padding-top: 24px; border-top: 1px solid var(--line); }
+.weekly-goal { margin-top: 28px; padding: 22px; border-radius: 18px; background: #eef3e6; }
+.weekly-goal h3 { margin: 0; font-size: 20px; }
+.weekly-goal p, .goal-status { margin: 8px 0 0; color: var(--muted); }
+.weekly-goal strong { font-size: 28px; }
+.goal-progress { height: 14px; overflow: hidden; margin: 14px 22px 0; border-radius: 999px; background: #d8ddd1; }
+.goal-progress i { display: block; height: 100%; border-radius: inherit; background: var(--ink); }
 .week-bars { display: flex; align-items: end; gap: 12px; height: 135px; margin-top: 18px; }
 .week-bars div { flex: 1; min-width: 26px; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: end; gap: 7px; }
 .week-bars i { width: 100%; min-height: 8px; background: var(--ink); border-radius: 7px 7px 2px 2px; }

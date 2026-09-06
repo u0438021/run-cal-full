@@ -307,7 +307,7 @@ def get_profile(claims: Annotated[dict, Depends(_bearer)]) -> dict:
     data = athlete.get().to_dict() or {}
     return {
         key: data.get(key)
-        for key in ("weightKg", "targetPaceSecondsPerKm", "maxHeartRate")
+        for key in ("weightKg", "targetPaceSecondsPerKm", "maxHeartRate", "weeklyDistanceGoalKm")
     }
 
 
@@ -321,6 +321,7 @@ def save_profile(profile: dict[str, Any], claims: Annotated[dict, Depends(_beare
         "weightKg": (25, 300),
         "targetPaceSecondsPerKm": (120, 1800),
         "maxHeartRate": (100, 260),
+        "weeklyDistanceGoalKm": (1, 500),
     }
     for key, (minimum, maximum) in limits.items():
         value = profile.get(key)
