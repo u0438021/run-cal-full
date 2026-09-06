@@ -17,7 +17,7 @@ const firebaseConfig = {
 type Metric = { value?: number; unit?: string };
 type Result = { activityId: string; status: string; cached: boolean; summary?: { metrics?: Record<string, Metric> } };
 type Activity = { id: string; originalName?: string; importStatus?: string; createdAt?: any };
-type SeriesPoint = { running?: boolean; speed_mps?: number; heart_rate_bpm?: number; power_w?: number; cadence_spm?: number };
+type SeriesPoint = { time?: string; running?: boolean; speed_mps?: number; heart_rate_bpm?: number; power_w?: number; cadence_spm?: number };
 type ChartName = "pace" | "heartRate" | "power" | "cadence";
 type TrainingTotal = { runs: number; durationSeconds: number; distanceM?: number | null; metrics: Record<string, number | null> };
 type TrainingDashboard = { allTime: TrainingTotal; months: Array<TrainingTotal & { period: string }>; weeks: Array<TrainingTotal & { period: string }> };
@@ -114,6 +114,32 @@ function coachingAdvice(summary: Result["summary"], profile: RunnerProfile) {
     notes.push(`Heart rate เฉลี่ยอยู่ที่ ${Math.round(share * 100)}% ของค่าสูงสุดที่ตั้งไว้`);
   }
   return notes;
+}
+
+function heartRateZones(series: SeriesPoint[], maxHeartRate?: number | null) {
+  if (!maxHeartRate) return [];
+  const zones = [
+    { name: "Z1 ฟื้นตัว", min: 0.5, max: 0.6, seconds: 0 },
+    { name: "Z2 เบา", min: 0.6, max: 0.7, seconds: 0 },
+    { name: "Z3 ปานกลาง", min: 0.7, max: 0.8, seconds: 0 },
+    { name: "Z4 หนัก", min: 0.8, max: 0.9, seconds: 0 },
+    { name: "Z5 สูง", min: 0.9, max: Infinity, seconds: 0 },
+  ];
+  for (let index = 0; index < series.length - 1; index += 1) {
+    const point = series[index];
+    const next = series[index + 1];
+    if (point.running === false || typeof point.heart_rate_bpm !== "number" || !point.time || !next.time) continue;
+    const seconds = (new Date(next.time).getTime() - new Date(point.time).getTime()) / 1000;
+    if (!Number.isFinite(seconds) || seconds <= 0 || seconds > 60) continue;
+    const share = point.heart_rate_bpm / maxHeartRate;
+    const zone = zones.find(item => share >= item.min && share < item.max);
+    if (zone) zone.seconds += seconds;
+  }
+  return zones;
+}
+
+function shortDuration(seconds: number) {
+  return seconds >= 3600 ? `${(seconds / 3600).toFixed(1)} ชม.` : `${Math.round(seconds / 60)} นาที`;
 }
 
 export default function Dashboard() {
@@ -327,6 +353,7 @@ export default function Dashboard() {
       <section className="recent"><h2>ประวัติการวิ่ง</h2><p>เลือกกิจกรรมเพื่อเปิดผลที่วิเคราะห์ไว้ โดยไม่ต้องอัปโหลดไฟล์ซ้ำ</p>{activities.length ? <div className="run-list">{activities.map(activity => <div className="history-row" key={activity.id}><button type="button" onClick={() => openActivity(activity.id)} aria-pressed={activeActivityId === activity.id} disabled={busy}><span>{activity.originalName || "ไฟล์ FIT"}</span><span>{activityDate(activity.createdAt)}</span><span>{activity.importStatus === "analyzed" ? "วิเคราะห์แล้ว" : "กำลังดำเนินการ"}</span></button><button type="button" className="remove-activity" onClick={() => removeActivity(activity)} disabled={busy}>ลบ</button></div>)}</div> : <p>ยังไม่มีประวัติการวิ่ง</p>}</section>
       {result && <section className="recent"><h2>ผลการวิเคราะห์</h2><p>สถานะ: {result.status === "analyzed" ? "สำเร็จ" : result.status} {result.cached ? "(ใช้ผลที่คำนวณไว้แล้ว)" : ""}</p><div className="analytics-grid">{Object.entries(result.summary?.metrics || {}).slice(0, 12).map(([key, metric]) => <article className="metric-card" key={key}><span>{key.replaceAll("_", " ")}</span><strong>{value(metric.value, metric.unit ? ` ${metric.unit}` : "")}</strong></article>)}</div></section>}
       {result && <section className="recent coaching"><h2>คำแนะนำหลังการวิ่ง</h2><p>เป็นการสรุปจากข้อมูลกิจกรรมและเป้าหมายที่คุณตั้งไว้ ไม่ใช่คำแนะนำทางการแพทย์</p><ul>{coachingAdvice(result.summary, profile).map(note => <li key={note}>{note}</li>)}</ul></section>}
+      {result && <section className="recent"><h2>โซนการฝึกและเป้าหมาย</h2>{(() => { const zones = heartRateZones(series, profile.maxHeartRate); const total = zones.reduce((sum, zone) => sum + zone.seconds, 0); const pace = result.summary?.metrics?.pace_s_km?.value; return <><p>{typeof profile.maxHeartRate === "number" ? `คำนวณจาก Max HR ${profile.maxHeartRate} bpm` : "เพิ่ม Max HR ในโปรไฟล์เพื่อดูโซนหัวใจ"}</p>{zones.length > 0 && total > 0 && <div className="zone-list">{zones.map(zone => <div className="zone-row" key={zone.name}><span>{zone.name}</span><div><i style={{ width: `${(zone.seconds / total) * 100}%` }} /></div><strong>{shortDuration(zone.seconds)}</strong></div>)}</div>}{typeof pace === "number" && typeof profile.targetPaceSecondsPerKm === "number" && <p className="goal-note">{pace <= profile.targetPaceSecondsPerKm ? "✓ Pace เฉลี่ยทำได้ตามเป้าหมาย" : `Pace เฉลี่ยช้ากว่าเป้าหมาย ${Math.round(pace - profile.targetPaceSecondsPerKm)} วินาที/กม.`}</p>}</>; })()}</section>}
       {result && <section className="recent"><div className="section-heading"><div><h2>กราฟระหว่างการวิ่ง</h2><p>แสดงเฉพาะช่วงที่นาฬิกาบันทึกข้อมูล</p></div><div className="segmented">{(Object.keys(CHARTS) as ChartName[]).map(name => <button type="button" key={name} className={chart === name ? "selected" : ""} onClick={() => setChart(name)} aria-pressed={chart === name}>{CHARTS[name].label}</button>)}</div></div>{series.length ? (() => { const data = chartPath(series, chart); return <figure className="activity-chart"><div className="chart-label"><strong>{CHARTS[chart].label}</strong><span>{value(data.min, ` ${CHARTS[chart].unit}`)} – {value(data.max, ` ${CHARTS[chart].unit}`)}</span></div><svg viewBox="0 0 600 220" role="img" aria-label={`กราฟ ${CHARTS[chart].label}`}><path className="chart-grid" d="M0 30H600 M0 110H600 M0 190H600" /><path className="chart-line" d={data.path} /></svg><figcaption>เริ่มการวิ่ง <span>จบการวิ่ง</span></figcaption></figure>; })() : <p>กำลังโหลดข้อมูลกราฟ…</p>}</section>}
     </>}
   </main>;

@@ -37,6 +37,12 @@ button:disabled { cursor: wait; opacity: .6; }
 .profile-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 16px; align-items: end; margin-top: 22px; }
 .profile-form label { display: grid; gap: 8px; font-size: 13px; font-weight: 700; }
 .coaching ul { display: grid; gap: 10px; padding-left: 22px; line-height: 1.5; }
+.zone-list { display: grid; gap: 12px; margin-top: 22px; }
+.zone-row { display: grid; grid-template-columns: 110px 1fr 70px; align-items: center; gap: 12px; font-size: 13px; }
+.zone-row > div { height: 10px; overflow: hidden; border-radius: 999px; background: #e5e8e1; }
+.zone-row i { display: block; height: 100%; border-radius: inherit; background: var(--lime); border: 1px solid var(--ink); }
+.zone-row strong { text-align: right; }
+.goal-note { margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--line); font-weight: 700; }
 .run-list { display: grid; gap: 8px; margin: 20px 0; }
 .run-list button { display: flex; flex-wrap: wrap; gap: 20px; justify-content: space-between; padding: 18px; background: var(--paper); border: 1px solid var(--line); border-radius: 12px; text-align: left; }
 .run-list button[aria-pressed="true"] { background: var(--lime); }
