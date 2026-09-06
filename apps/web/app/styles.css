@@ -40,6 +40,9 @@ button:disabled { cursor: wait; opacity: .6; }
 .run-list { display: grid; gap: 8px; margin: 20px 0; }
 .run-list button { display: flex; flex-wrap: wrap; gap: 20px; justify-content: space-between; padding: 18px; background: var(--paper); border: 1px solid var(--line); border-radius: 12px; text-align: left; }
 .run-list button[aria-pressed="true"] { background: var(--lime); }
+.history-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+.history-row > button:first-child { width: 100%; }
+.run-list .remove-activity { color: #a32519; background: #fff; padding-inline: 14px; }
 figure { margin: 24px 0; }
 figure svg { width: 100%; height: auto; }
 .table-scroll { overflow-x: auto; }

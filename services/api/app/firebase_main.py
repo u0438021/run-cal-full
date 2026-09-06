@@ -430,6 +430,25 @@ def analyze_activity(activity_id: str, claims: Annotated[dict, Depends(_bearer)]
     }
 
 
+@app.post("/v1/activities/{activity_id}/delete")
+def delete_activity(activity_id: str, claims: Annotated[dict, Depends(_bearer)]) -> dict:
+    """Hide an activity from the athlete's history without destroying its source file."""
+    try:
+        UUID(activity_id)
+    except ValueError as exc:
+        raise HTTPException(400, "Invalid activity ID") from exc
+    uid = claims.get("uid") or claims.get("sub")
+    if not isinstance(uid, str) or not uid:
+        raise HTTPException(401, "Invalid session")
+    database, _bucket = _firebase_clients()
+    _workspace, activity_ref, _file_ref, _monthly = _activity_refs(database, uid, activity_id)
+    activity = activity_ref.get()
+    if not activity.exists or activity.to_dict().get("deletedAt") is not None:
+        raise HTTPException(404, "Activity not found")
+    activity_ref.update({"deletedAt": firestore.SERVER_TIMESTAMP, "importStatus": "deleted"})
+    return {"activityId": activity_id, "status": "deleted"}
+
+
 @app.get("/v1/activities/{activity_id}/analytics")
 def get_activity_analytics(activity_id: str, claims: Annotated[dict, Depends(_bearer)]) -> dict:
     try:

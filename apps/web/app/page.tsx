@@ -159,7 +159,7 @@ export default function Dashboard() {
         if (!workspaceId || cancelled) return;
         unsubscribe = db.collection("workspaces").doc(workspaceId).collection("athletes").doc(user.uid)
           .collection("activities").orderBy("createdAt", "desc").limit(20)
-          .onSnapshot((snapshot: any) => setActivities(snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }))));
+          .onSnapshot((snapshot: any) => setActivities(snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() })).filter((activity: Activity & { deletedAt?: any }) => !activity.deletedAt)));
       } catch {
         if (!cancelled) setError("ไม่สามารถโหลดประวัติการวิ่งได้");
       }
@@ -251,10 +251,13 @@ export default function Dashboard() {
       const bytes = new Uint8Array(await file.arrayBuffer());
       const digest = await crypto.subtle.digest("SHA-256", bytes);
       const sha256 = Array.from(new Uint8Array(digest)).map(n => n.toString(16).padStart(2, "0")).join("");
+      const activitiesRef = db.collection("workspaces").doc(workspaceId).collection("athletes").doc(user.uid).collection("activities");
+      const duplicate = await activitiesRef.where("sourceSha256", "==", sha256).limit(1).get();
+      if (!duplicate.empty) throw new Error("ไฟล์นี้ถูกนำเข้าแล้ว กรุณาเลือกดูผลจากประวัติการวิ่ง");
       const objectKey = `fit-staging/${workspaceId}/${user.uid}/${activityId}.fit`;
       await storage.ref(objectKey).put(file, { contentType: "application/octet-stream" });
-      const activity = db.collection("workspaces").doc(workspaceId).collection("athletes").doc(user.uid).collection("activities").doc(activityId);
-      await activity.set({ createdAt: window.firebase.firestore.FieldValue.serverTimestamp(), originalName: file.name, importStatus: "uploaded" });
+      const activity = activitiesRef.doc(activityId);
+      await activity.set({ createdAt: window.firebase.firestore.FieldValue.serverTimestamp(), originalName: file.name, sourceSha256: sha256, importStatus: "uploaded" });
       await activity.collection("fitFiles").doc(activityId).set({ objectKey, originalName: file.name, sha256, uploadedAt: window.firebase.firestore.FieldValue.serverTimestamp() });
       setMessage("กำลังวิเคราะห์ข้อมูลการวิ่ง…");
       const token = await user.getIdToken();
@@ -277,6 +280,21 @@ export default function Dashboard() {
       setResult(analysisResult(activityId, payload)); setActiveActivityId(activityId); setMessage("");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "ไม่สามารถเปิดผลการวิเคราะห์ได้"); setMessage("");
+    } finally { setBusy(false); }
+  }
+
+  async function removeActivity(activity: Activity) {
+    if (!user || !window.confirm(`ลบ ${activity.originalName || "กิจกรรมนี้"} ออกจากประวัติใช่หรือไม่?`)) return;
+    setBusy(true); setError("");
+    try {
+      const token = await user.getIdToken();
+      const response = await fetch(`${API_ORIGIN}/v1/activities/${activity.id}/delete`, { method: "POST", headers: { Authorization: `Bearer ${token}` } });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.detail || "ไม่สามารถลบกิจกรรมได้");
+      if (activeActivityId === activity.id) { setActiveActivityId(null); setResult(null); }
+      setMessage("ลบกิจกรรมออกจากประวัติแล้ว");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "ไม่สามารถลบกิจกรรมได้");
     } finally { setBusy(false); }
   }
 
@@ -306,7 +324,7 @@ export default function Dashboard() {
       <section className="recent"><h2>นำเข้าและวิเคราะห์ FIT</h2><p>เข้าสู่ระบบในชื่อ {user.email} แล้ว เลือกไฟล์จากนาฬิกาวิ่งของคุณเพื่อวิเคราะห์ Pace, Heart rate, Power, Cadence และข้อมูลประกอบการวิ่ง</p><form className="toolbar" onSubmit={uploadAndAnalyze}><label>ไฟล์ FIT<input type="file" accept=".fit" onChange={e => setFile(e.target.files?.[0] || null)} required disabled={busy} /></label><button className="upload" disabled={busy || !file}>{busy ? "กำลังทำงาน…" : "วิเคราะห์ไฟล์"}</button></form></section>
       {dashboard && (() => { const month = dashboard.months[0] || dashboard.allTime; const maxWeek = Math.max(...dashboard.weeks.map(week => week.durationSeconds), 1); return <section className="recent"><div className="section-heading"><div><h2>ภาพรวมการฝึก</h2><p>{dashboard.months[0] ? periodLabel(dashboard.months[0].period) : "กิจกรรมที่วิเคราะห์ทั้งหมด"}</p></div></div><div className="summary-grid"><article><span>จำนวนครั้ง</span><strong>{month.runs}</strong><small>กิจกรรม</small></article><article><span>เวลาวิ่งรวม</span><strong>{durationLabel(month.durationSeconds)}</strong></article><article><span>ระยะทางรวม</span><strong>{typeof month.distanceM === "number" ? `${(month.distanceM / 1000).toLocaleString("th-TH", { maximumFractionDigits: 1 })} กม.` : "—"}</strong></article><article><span>Pace เฉลี่ย</span><strong>{paceLabel(month.metrics.pace_s_km)}</strong></article><article><span>Heart rate เฉลี่ย</span><strong>{value(month.metrics.heart_rate_bpm, " bpm")}</strong></article><article><span>Power เฉลี่ย</span><strong>{value(month.metrics.power_w, " W")}</strong></article></div>{dashboard.weeks.length > 0 && <div className="weekly-trend"><div className="section-heading"><strong>แนวโน้มเวลาวิ่งรายสัปดาห์</strong><span>8 สัปดาห์ล่าสุด</span></div><div className="week-bars">{[...dashboard.weeks].reverse().map(week => <div key={week.period} title={`${week.period}: ${durationLabel(week.durationSeconds)}`}><i style={{ height: `${Math.max(8, (week.durationSeconds / maxWeek) * 100)}%` }} /><span>{week.period.slice(-2)}</span></div>)}</div></div>}</section>; })()}
       <section className="recent"><h2>โปรไฟล์นักวิ่ง</h2><p>ข้อมูลนี้ใช้ปรับคำแนะนำในอุปกรณ์ของคุณ และไม่ส่งต่อไปยังบริการ AI ภายนอก</p><form className="profile-form" onSubmit={saveProfile}><label>น้ำหนัก (กก.)<input inputMode="decimal" value={weightInput} onChange={event => setWeightInput(event.target.value)} placeholder="เช่น 65" /></label><label>Pace เป้าหมาย (นาที:วินาที/กม.)<input value={targetPaceInput} onChange={event => setTargetPaceInput(event.target.value)} placeholder="เช่น 6:00" /></label><label>Heart rate สูงสุด (bpm)<input inputMode="numeric" value={maxHeartRateInput} onChange={event => setMaxHeartRateInput(event.target.value)} placeholder="เช่น 185" /></label><button className="upload" disabled={busy}>บันทึกโปรไฟล์</button></form>{profileMessage && <p role="status">{profileMessage}</p>}</section>
-      <section className="recent"><h2>ประวัติการวิ่ง</h2><p>เลือกกิจกรรมเพื่อเปิดผลที่วิเคราะห์ไว้ โดยไม่ต้องอัปโหลดไฟล์ซ้ำ</p>{activities.length ? <div className="run-list">{activities.map(activity => <button type="button" key={activity.id} onClick={() => openActivity(activity.id)} aria-pressed={activeActivityId === activity.id} disabled={busy}><span>{activity.originalName || "ไฟล์ FIT"}</span><span>{activityDate(activity.createdAt)}</span><span>{activity.importStatus === "analyzed" ? "วิเคราะห์แล้ว" : "กำลังดำเนินการ"}</span></button>)}</div> : <p>ยังไม่มีประวัติการวิ่ง</p>}</section>
+      <section className="recent"><h2>ประวัติการวิ่ง</h2><p>เลือกกิจกรรมเพื่อเปิดผลที่วิเคราะห์ไว้ โดยไม่ต้องอัปโหลดไฟล์ซ้ำ</p>{activities.length ? <div className="run-list">{activities.map(activity => <div className="history-row" key={activity.id}><button type="button" onClick={() => openActivity(activity.id)} aria-pressed={activeActivityId === activity.id} disabled={busy}><span>{activity.originalName || "ไฟล์ FIT"}</span><span>{activityDate(activity.createdAt)}</span><span>{activity.importStatus === "analyzed" ? "วิเคราะห์แล้ว" : "กำลังดำเนินการ"}</span></button><button type="button" className="remove-activity" onClick={() => removeActivity(activity)} disabled={busy}>ลบ</button></div>)}</div> : <p>ยังไม่มีประวัติการวิ่ง</p>}</section>
       {result && <section className="recent"><h2>ผลการวิเคราะห์</h2><p>สถานะ: {result.status === "analyzed" ? "สำเร็จ" : result.status} {result.cached ? "(ใช้ผลที่คำนวณไว้แล้ว)" : ""}</p><div className="analytics-grid">{Object.entries(result.summary?.metrics || {}).slice(0, 12).map(([key, metric]) => <article className="metric-card" key={key}><span>{key.replaceAll("_", " ")}</span><strong>{value(metric.value, metric.unit ? ` ${metric.unit}` : "")}</strong></article>)}</div></section>}
       {result && <section className="recent coaching"><h2>คำแนะนำหลังการวิ่ง</h2><p>เป็นการสรุปจากข้อมูลกิจกรรมและเป้าหมายที่คุณตั้งไว้ ไม่ใช่คำแนะนำทางการแพทย์</p><ul>{coachingAdvice(result.summary, profile).map(note => <li key={note}>{note}</li>)}</ul></section>}
       {result && <section className="recent"><div className="section-heading"><div><h2>กราฟระหว่างการวิ่ง</h2><p>แสดงเฉพาะช่วงที่นาฬิกาบันทึกข้อมูล</p></div><div className="segmented">{(Object.keys(CHARTS) as ChartName[]).map(name => <button type="button" key={name} className={chart === name ? "selected" : ""} onClick={() => setChart(name)} aria-pressed={chart === name}>{CHARTS[name].label}</button>)}</div></div>{series.length ? (() => { const data = chartPath(series, chart); return <figure className="activity-chart"><div className="chart-label"><strong>{CHARTS[chart].label}</strong><span>{value(data.min, ` ${CHARTS[chart].unit}`)} – {value(data.max, ` ${CHARTS[chart].unit}`)}</span></div><svg viewBox="0 0 600 220" role="img" aria-label={`กราฟ ${CHARTS[chart].label}`}><path className="chart-grid" d="M0 30H600 M0 110H600 M0 190H600" /><path className="chart-line" d={data.path} /></svg><figcaption>เริ่มการวิ่ง <span>จบการวิ่ง</span></figcaption></figure>; })() : <p>กำลังโหลดข้อมูลกราฟ…</p>}</section>}
