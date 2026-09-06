@@ -65,6 +65,11 @@ function activityDate(timestamp: any) {
   return date ? date.toLocaleDateString("th-TH", { dateStyle: "medium" }) : "กำลังบันทึกวันที่";
 }
 
+function activityTimestamp(timestamp: any) {
+  const date = timestamp?.toDate?.();
+  return date ? date.toISOString() : null;
+}
+
 function chartPath(series: SeriesPoint[], chart: ChartName) {
   const values = series.map(CHARTS[chart].value).filter((value): value is number => value !== null);
   if (!values.length) return { path: "", min: 0, max: 0 };
@@ -391,6 +396,32 @@ export default function Dashboard() {
     } finally { setBusy(false); }
   }
 
+  function downloadAccountBackup() {
+    const backup = {
+      exportedAt: new Date().toISOString(),
+      profile: {
+        weightKg: profile.weightKg ?? null,
+        targetPaceSecondsPerKm: profile.targetPaceSecondsPerKm ?? null,
+        maxHeartRate: profile.maxHeartRate ?? null,
+        weeklyDistanceGoalKm: profile.weeklyDistanceGoalKm ?? null,
+      },
+      activities: activities.map(activity => ({
+        id: activity.id,
+        originalName: activity.originalName || "FIT file",
+        analyzedAt: activityTimestamp(activity.createdAt),
+        status: activity.importStatus || "unknown",
+      })),
+    };
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `run-cal-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    setMessage("ดาวน์โหลดสำเนาข้อมูลเรียบร้อยแล้ว");
+  }
+
   return <main className="live-dashboard">
     <header className="topbar"><div><p className="kicker">RUN | CAL</p><h1>Running analytics</h1></div>{user && <button onClick={() => initializeFirebase().auth.signOut()}>ออกจากระบบ</button>}</header>
     {error && <p className="error" role="alert">{error}</p>}
@@ -400,6 +431,7 @@ export default function Dashboard() {
       {dashboard && (() => { const month = dashboard.months[0] || dashboard.allTime; const maxWeek = Math.max(...dashboard.weeks.map(week => week.durationSeconds), 1); const currentWeek = dashboard.weeks[0]; const goalKm = profile.weeklyDistanceGoalKm || 30; const completedKm = (currentWeek?.distanceM || 0) / 1000; const progress = Math.min(100, (completedKm / goalKm) * 100); return <section className="recent"><div className="section-heading"><div><h2>ภาพรวมการฝึก</h2><p>{dashboard.months[0] ? periodLabel(dashboard.months[0].period) : "กิจกรรมที่วิเคราะห์ทั้งหมด"}</p></div></div><div className="summary-grid"><article><span>จำนวนครั้ง</span><strong>{month.runs}</strong><small>กิจกรรม</small></article><article><span>เวลาวิ่งรวม</span><strong>{durationLabel(month.durationSeconds)}</strong></article><article><span>ระยะทางรวม</span><strong>{typeof month.distanceM === "number" ? `${(month.distanceM / 1000).toLocaleString("th-TH", { maximumFractionDigits: 1 })} กม.` : "—"}</strong></article><article><span>Pace เฉลี่ย</span><strong>{paceLabel(month.metrics.pace_s_km)}</strong></article><article><span>Heart rate เฉลี่ย</span><strong>{value(month.metrics.heart_rate_bpm, " bpm")}</strong></article><article><span>Power เฉลี่ย</span><strong>{value(month.metrics.power_w, " W")}</strong></article></div><div className="weekly-goal"><div className="section-heading"><div><h3>เป้าหมายสัปดาห์นี้</h3><p>{completedKm.toLocaleString("th-TH", { maximumFractionDigits: 1 })} จาก {goalKm.toLocaleString("th-TH", { maximumFractionDigits: 0 })} กม.</p></div><strong>{Math.round(progress)}%</strong></div><div className="goal-progress" aria-label={`ทำได้ ${Math.round(progress)}% ของเป้าหมาย`}><i style={{ width: `${progress}%` }} /></div><p className="goal-status">{completedKm >= goalKm ? "✓ ทำเป้าหมายระยะทางของสัปดาห์นี้แล้ว" : `เหลืออีก ${(goalKm - completedKm).toLocaleString("th-TH", { maximumFractionDigits: 1 })} กม. เพื่อถึงเป้าหมาย`}</p></div>{dashboard.weeks.length > 0 && <div className="weekly-trend"><div className="section-heading"><strong>แนวโน้มเวลาวิ่งรายสัปดาห์</strong><span>8 สัปดาห์ล่าสุด</span></div><div className="week-bars">{[...dashboard.weeks].reverse().map(week => <div key={week.period} title={`${week.period}: ${durationLabel(week.durationSeconds)}`}><i style={{ height: `${Math.max(8, (week.durationSeconds / maxWeek) * 100)}%` }} /><span>{week.period.slice(-2)}</span></div>)}</div></div>}</section>; })()}
       <section className="recent reminder-card"><h2>แจ้งเตือนความคืบหน้า</h2><p>เมื่อเปิด RUN | CAL ระบบจะแจ้งสถานะเป้าหมายของสัปดาห์นี้บนอุปกรณ์ของคุณ ข้อมูลการวิ่งไม่ถูกส่งออกไปภายนอก</p>{notificationPermission === "unsupported" ? <p>อุปกรณ์หรือเบราว์เซอร์นี้ไม่รองรับการแจ้งเตือน</p> : <button type="button" className="upload" onClick={() => setWeeklyReminder(!profile.weeklyReminderEnabled)} disabled={busy}>{profile.weeklyReminderEnabled ? "ปิดการแจ้งเตือน" : "เปิดการแจ้งเตือน"}</button>}{reminderMessage && <p role="status">{reminderMessage}</p>}</section>
       <section className="recent"><h2>โปรไฟล์นักวิ่ง</h2><p>ข้อมูลนี้ใช้ปรับคำแนะนำในอุปกรณ์ของคุณ และไม่ส่งต่อไปยังบริการ AI ภายนอก</p><form className="profile-form" onSubmit={saveProfile}><label>น้ำหนัก (กก.)<input inputMode="decimal" value={weightInput} onChange={event => setWeightInput(event.target.value)} placeholder="เช่น 65" /></label><label>Pace เป้าหมาย (นาที:วินาที/กม.)<input value={targetPaceInput} onChange={event => setTargetPaceInput(event.target.value)} placeholder="เช่น 6:00" /></label><label>Heart rate สูงสุด (bpm)<input inputMode="numeric" value={maxHeartRateInput} onChange={event => setMaxHeartRateInput(event.target.value)} placeholder="เช่น 185" /></label><label>เป้าหมายระยะวิ่ง/สัปดาห์ (กม.)<input inputMode="decimal" value={weeklyGoalInput} onChange={event => setWeeklyGoalInput(event.target.value)} placeholder="เช่น 30" /></label><button className="upload" disabled={busy}>บันทึกโปรไฟล์</button></form>{profileMessage && <p role="status">{profileMessage}</p>}</section>
+      <section className="recent backup-card"><h2>สำรองข้อมูลของฉัน</h2><p>ดาวน์โหลดโปรไฟล์และรายการกิจกรรมที่วิเคราะห์แล้วเป็นไฟล์ JSON เพื่อเก็บสำเนาไว้กับคุณ ไฟล์ FIT ต้นฉบับจะไม่ถูกรวมอยู่ในไฟล์นี้</p><button type="button" onClick={downloadAccountBackup} disabled={busy}>ดาวน์โหลดสำเนาข้อมูล</button></section>
       <section className="recent"><h2>ประวัติการวิ่ง</h2><p>เลือกกิจกรรมเพื่อเปิดผลที่วิเคราะห์ไว้ โดยไม่ต้องอัปโหลดไฟล์ซ้ำ</p>{activities.length ? <div className="run-list">{activities.map(activity => <div className="history-row" key={activity.id}><button type="button" onClick={() => openActivity(activity.id)} aria-pressed={activeActivityId === activity.id} disabled={busy}><span>{activity.originalName || "ไฟล์ FIT"}</span><span>{activityDate(activity.createdAt)}</span><span>{activity.importStatus === "analyzed" ? "วิเคราะห์แล้ว" : "กำลังดำเนินการ"}</span></button><button type="button" className="remove-activity" onClick={() => removeActivity(activity)} disabled={busy}>ลบ</button></div>)}</div> : <p>ยังไม่มีประวัติการวิ่ง</p>}</section>
       {result && <section className="recent"><h2>ผลการวิเคราะห์</h2><p>สถานะ: {result.status === "analyzed" ? "สำเร็จ" : result.status} {result.cached ? "(ใช้ผลที่คำนวณไว้แล้ว)" : ""}</p><div className="analytics-grid">{Object.entries(result.summary?.metrics || {}).slice(0, 12).map(([key, metric]) => <article className="metric-card" key={key}><span>{key.replaceAll("_", " ")}</span><strong>{value(metric.value, metric.unit ? ` ${metric.unit}` : "")}</strong></article>)}</div></section>}
       {result && <section className="recent coaching"><h2>คำแนะนำหลังการวิ่ง</h2><p>เป็นการสรุปจากข้อมูลกิจกรรมและเป้าหมายที่คุณตั้งไว้ ไม่ใช่คำแนะนำทางการแพทย์</p><ul>{coachingAdvice(result.summary, profile).map(note => <li key={note}>{note}</li>)}</ul></section>}
